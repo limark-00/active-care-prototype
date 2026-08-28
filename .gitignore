@@ -1,0 +1,33 @@
+# OS files
+.DS_Store
+
+# Dependencies and generated outputs
+node_modules/
+.venv/
+.pnpm-store/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.tsbuildinfo
+.next/
+.vinext/
+dist/
+coverage/
+.wrangler/
+.runtime/
+test-artifacts/
+
+# Local secrets and environment configuration
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.log
+
+# Model weights are downloaded and verified by vision/download_model.py
+vision/models/*.pt
+
+# Locally exported demo reports
+active-care-demo-session*.json

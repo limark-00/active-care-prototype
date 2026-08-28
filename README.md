@@ -1,7 +1,5 @@
 # Active Care · 认知症主动安全伴护原型
 
-> **仓库状态**：目前本仓库只包含使用说明，尚未上传 `web/`、`vision/` 等项目源码。下文安装与启动步骤需要源码补齐后才能执行。
-
 一个用于工业设计研究、交互验证与项目展示的本地软件原型：通过电脑摄像头和 YOLO 姿态模型获取人员与关键点信息，结合区域、持续时间和环境模拟输入，完成风险事件、渐进式干预、人工反馈与处理记录的闭环。
 
 **核心原则：风险程度与干预方式分开判断，采用最低必要干预。**
@@ -58,10 +56,10 @@
 
 ### 1. 获取项目
 
-克隆仓库并进入项目目录。请先确认仓库中已包含 `web/` 和 `vision/` 源码。
+克隆仓库并进入项目目录：
 
 ```bash
-git clone https://github.com/limark-00/yl_1.git active-care
+git clone https://github.com/limark-00/active-care-prototype.git active-care
 cd active-care
 ```
 
