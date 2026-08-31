@@ -12,9 +12,47 @@ class FakeDetector:
         return []
 
 
+class FakeDecisionModel:
+    model_name = 'decision-test-double'
+    device = 'cpu'
+    run_name = 'partial-macbert-v31-test'
+    created = 0
+    def __init__(self):
+        type(self).created += 1
+    def predict(self, text):
+        def prediction(label, values):
+            probability = round(1 / len(values), 6)
+            probabilities = {str(value).lower() if isinstance(value, bool) else value: probability for value in values}
+            probabilities[str(label).lower() if isinstance(label, bool) else label] += 1 - sum(probabilities.values())
+            return {'label': label, 'confidence': probabilities[str(label).lower() if isinstance(label, bool) else label], 'probabilities': probabilities}
+        return {
+            'schema_version': 1,
+            'source': 'local_text_model',
+            'model': self.model_name,
+            'base_model': 'test-base',
+            'run_name': self.run_name,
+            'device': self.device,
+            'input_characters': len(text),
+            'segment_count': 2,
+            'inference_ms': 12.3,
+            'model_output': {
+                'risk_level': prediction('L2', ['L0','L1','L2','L3','L4']),
+                'intervention_level': prediction('I2', ['I0','I1','I2','I3','I4']),
+                'alert_mode': prediction('PAGE_WARNING', ['NONE','PAGE_WARNING','URGENT_HELP']),
+                'manual_review': prediction(False, [False, True]),
+                'abstain': prediction(False, [False, True]),
+            },
+            'guarded_output': {'risk_level':'L2','intervention_level':'I2','alert_mode':'PAGE_WARNING','manual_review':False,'abstain':False},
+            'guardrail_applied': False,
+            'review_reasons': [],
+            'limitations': 'test',
+        }
+
+
 @pytest.fixture
 def client():
-    with TestClient(create_app(FakeDetector)) as client:
+    FakeDecisionModel.created = 0
+    with TestClient(create_app(FakeDetector, FakeDecisionModel)) as client:
         yield client
 
 
@@ -41,6 +79,24 @@ def test_health_and_real_contract_no_people(client):
     assert response.json()['frame_id'] == 1
     assert response.json()['width'] == 640
     assert response.headers['cache-control'] == 'no-store'
+
+
+def test_text_decision_is_lazy_local_and_reuses_model(client):
+    status = client.get('/decision/status').json()
+    assert status == {'available': True, 'loaded': False, 'run_name': 'test-double'}
+    text = '地点：厨房。\n事件1：患者反复操作灶台旋钮。'
+    first = client.post('/decision/predict', json={'text':text}, headers=HEADERS)
+    second = client.post('/decision/predict', json={'text':text}, headers=HEADERS)
+    assert first.status_code == second.status_code == 200
+    assert first.json()['source'] == 'local_text_model'
+    assert first.json()['guarded_output']['intervention_level'] == 'I2'
+    assert FakeDecisionModel.created == 1
+    assert client.get('/health').json()['decision_loaded'] is True
+
+
+def test_text_decision_validates_length_and_client_marker(client):
+    assert client.post('/decision/predict', json={'text':'太短'}, headers=HEADERS).status_code == 422
+    assert client.post('/decision/predict', json={'text':'这是长度足够但没有客户端标记的文字输入。'}).status_code == 403
 
 
 def test_reject_remote_origin_and_unmarked_post(client):

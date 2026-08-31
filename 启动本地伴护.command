@@ -25,6 +25,15 @@ else
   "$PYTHON_BIN" -m uvicorn app:app --host 127.0.0.1 --port 8001 --no-access-log &
   VISION_PID=$!
 fi
+for _attempt in {1..30}; do
+  if curl --noproxy '*' -fsS --max-time 2 http://127.0.0.1:8001/health >/dev/null 2>&1; then break; fi
+  sleep 0.2
+done
+DECISION_STATUS="$(curl --noproxy '*' -fsS --max-time 3 http://127.0.0.1:8001/decision/status 2>/dev/null || true)"
+case "$DECISION_STATUS" in
+  *'"available":true'*) echo 'AI决策：V3.1检查点可用，将在首次事件时载入。' ;;
+  *) echo 'AI决策：降级运行（模型缺失或旧后端未重启）；摄像头与规则引擎仍可使用。' ;;
+esac
 cd "$PROJECT_DIR/web"
 if curl --noproxy '*' -fsS --max-time 2 http://localhost:3000/ >/dev/null 2>&1; then
   echo '网页已在运行：http://localhost:3000'
@@ -32,6 +41,6 @@ else
   pnpm dev --port 3000 &
   WEB_PID=$!
 fi
-echo '请打开 http://localhost:3000，点击“开启摄像头与识别”。'
+echo '请打开 http://localhost:3000。摄像头、环境和人工文字事件将进入统一事件流程。'
 echo '保留此终端；按 Ctrl+C 停止本脚本启动的服务。'
 wait

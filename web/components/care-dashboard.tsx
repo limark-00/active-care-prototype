@@ -6,6 +6,7 @@ import {
   Activity,
   ArrowDown,
   Bell,
+  BrainCircuit,
   Check,
   ChevronRight,
   Clock3,
@@ -14,6 +15,8 @@ import {
   Flame,
   LayoutDashboard,
   ListChecks,
+  LoaderCircle,
+  RotateCcw,
   Settings2,
   Shield,
   Thermometer,
@@ -29,26 +32,33 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import VisionPanel from '@/components/vision-panel';
 import FrameworkPanel from '@/components/framework-panel';
+import FeedbackLoopPanel from '@/components/feedback-loop-panel';
 import InterventionOutput from '@/components/intervention-output';
+import TextDecisionPanel from '@/components/text-decision-panel';
+import { useAIEventOrchestrator } from '@/components/use-ai-event-orchestrator';
 import { buildSessionReport } from '@/lib/care/session';
+import { CARE_SCENES, decisionPayload } from '@/lib/care/ai';
 import { useZoneMonitor } from '@/components/use-zone-monitor';
 import type { ZoneState } from '@/lib/zones';
 import {
   activeEvents,
   canClose,
   careReducer,
+  FEEDBACK_LABELS,
   initialState,
   INITIAL_INPUT,
   inputIsAvailable,
   INTERVENTION_LABELS,
   PHASE_LABELS,
   POLICY,
+  PROFILE_LABELS,
 } from '@/lib/care/engine';
 import type {
   AlarmState,
   CareAction,
   CareEvent,
   CareState,
+  CareScene,
   EnvironmentInput,
   Intervention,
   Profile,
@@ -138,41 +148,127 @@ function EventCard({
         </span>
         <span
           className={
-            event.source === 'camera' ? 'camera-source-label' : 'source-label'
+            event.source === 'camera'
+              ? 'camera-source-label'
+              : event.source === 'manual'
+                ? 'manual-source-label'
+                : 'source-label'
           }
         >
-          {event.source === 'camera' ? '摄像头证据' : '模拟输入'}
+          {
+            {
+              camera: '摄像头证据',
+              simulated: '模拟输入',
+              manual: '人工文字',
+            }[event.source]
+          }
         </span>
+        <span>场景：{event.context.scene}</span>
         {event.target && <span>{event.target}</span>}
         {event.signal === 'unknown' && !closed && (
           <strong>观测未知 · 保留警报</strong>
         )}
       </div>
       <p className="event-evidence">{event.evidence}</p>
+      <div
+        className={`event-ai ${event.aiDecision?.status === 'failed' ? 'event-ai-failed' : ''}`}
+        aria-live="polite"
+      >
+        <div className="event-ai-heading">
+          <span>
+            {event.aiDecision?.status === 'running' ? (
+              <LoaderCircle className="model-spinner" size={14} />
+            ) : (
+              <BrainCircuit size={14} />
+            )}
+            本机AI辅助判断
+          </span>
+          {event.aiDecision?.status === 'failed' && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                dispatch({ type: 'ai-retry', id: event.id, now: now() })
+              }
+            >
+              <RotateCcw size={12} />
+              重试
+            </Button>
+          )}
+        </div>
+        {event.aiDecision === null && event.source !== 'manual' && (
+          <p>等待进入串行推理队列；规则决策已经生效。</p>
+        )}
+        {event.aiDecision?.status === 'running' && (
+          <p>正在读取统一事件文字；摄像头与规则流程继续运行。</p>
+        )}
+        {event.aiDecision?.status === 'failed' && (
+          <p>
+            {event.aiDecision.error}{' '}
+            事件仍采用规则基线，不会因AI不可用而消失或降级。
+          </p>
+        )}
+        {event.aiDecision?.status === 'completed' &&
+          event.aiDecision.decision && (
+            <>
+              <div className="event-ai-values">
+                <strong>
+                  AI {event.aiDecision.decision.risk} ·{' '}
+                  {event.aiDecision.decision.intervention} ·{' '}
+                  {event.aiDecision.decision.alertMode}
+                </strong>
+                <span>
+                  风险{' '}
+                  {(event.aiDecision.decision.riskConfidence * 100).toFixed(1)}%
+                  {' · '}干预{' '}
+                  {(
+                    event.aiDecision.decision.interventionConfidence * 100
+                  ).toFixed(1)}
+                  %
+                </span>
+              </div>
+              <p>
+                {event.ruleDecision
+                  ? `规则基线 ${event.ruleDecision.risk} / ${event.ruleDecision.intervention}；当前安全融合为 ${event.risk} / ${event.intervention}，模型不能降低规则或能力预设下限。`
+                  : '该事件来自人工文字，当前风险与干预由模型建议创建。'}
+              </p>
+              {(event.aiDecision.decision.manualReview ||
+                event.aiDecision.decision.abstain) && (
+                <strong className="event-ai-review">
+                  需要人工核查
+                  {event.aiDecision.decision.abstain
+                    ? ' · 模型拒绝自动定案'
+                    : ''}
+                </strong>
+              )}
+            </>
+          )}
+      </div>
       <InterventionOutput
         event={event}
         state={state}
         dispatch={dispatch}
         now={now}
       />
+      {!closed && (
+        <FeedbackLoopPanel
+          event={event}
+          state={state}
+          dispatch={dispatch}
+          now={now}
+        />
+      )}
       <div className="event-status">
         <span>
           {event.acknowledgedAt !== null ? '✓ 已确认接手' : '待人工接手'}
         </span>
         <span>
           反馈：
-          {
-            {
-              none: '未收到',
-              responded: '人工代填 · 已回应',
-              declined: '人工代填 · 拒绝提醒',
-              help: '人工代填 · 请求帮助',
-            }[event.feedback]
-          }
+          {event.feedback === 'none'
+            ? '未收到'
+            : `人工代填 · ${FEEDBACK_LABELS[event.feedback]}`}
         </span>
-        <span>
-          预设：{event.profile === 'voice' ? '可理解简短提醒' : '需要图示支持'}
-        </span>
+        <span>能力预设：{PROFILE_LABELS[event.profile]}</span>
       </div>
       {event.falseAlarmNote && (
         <p className="annotation">
@@ -205,84 +301,65 @@ function EventCard({
             <span>
               {event.kind === 'fall_candidate'
                 ? '须填写实际核查说明，不能仅凭姿态恢复结束'
-                : event.signal === 'unknown'
-                  ? '等待有效输入'
-                  : remaining === null
-                    ? event.source === 'camera'
-                      ? '须确认同一对象在区域外'
-                      : '须先恢复模拟输入'
-                    : remaining > 0
-                      ? `稳定观察还需 ${remaining} 秒`
-                      : '输入稳定，可人工结束'}
+                : event.source === 'manual'
+                  ? '人工文字没有持续观测，须核查后填写说明结束'
+                  : event.signal === 'unknown'
+                    ? '等待有效输入'
+                    : remaining === null
+                      ? event.source === 'camera'
+                        ? '须确认同一对象在区域外'
+                        : '须先恢复模拟输入'
+                      : remaining > 0
+                        ? `稳定观察还需 ${remaining} 秒`
+                        : '输入稳定，可人工结束'}
             </span>
           </div>
-          {event.source === 'camera' &&
-            (event.signal === 'unknown' || event.kind === 'fall_candidate') && (
-              <details className="manual-review">
-                <summary>
-                  {event.kind === 'fall_candidate'
+          {(event.source === 'manual' ||
+            (event.source === 'camera' &&
+              (event.signal === 'unknown' ||
+                event.kind === 'fall_candidate'))) && (
+            <details className="manual-review">
+              <summary>
+                {event.source === 'manual'
+                  ? '人工文字事件核查'
+                  : event.kind === 'fall_candidate'
                     ? '疑似跌倒后的人工核查'
                     : '视觉证据中断后的人工核查'}
-                </summary>
-                <p>
-                  仅在你已实际核查对象情况后使用。此操作记录人工处置，不代表系统识别到风险解除。
-                </p>
-                <div>
-                  <Input
-                    aria-label={`${event.id} 人工核查说明`}
-                    maxLength={200}
-                    value={review}
-                    onChange={(e) => setReview(e.target.value)}
-                    placeholder="填写实际核查情况与处置结果"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!review.trim()}
-                    onClick={() =>
-                      dispatch({
-                        type: 'review-close',
-                        id: event.id,
-                        note: review,
-                        now: now(),
-                      })
-                    }
-                  >
-                    记录核查并结束
-                  </Button>
-                </div>
-              </details>
-            )}
-          <details className="feedback-details">
-            <summary>
-              记录反馈 / 标记误报 <ChevronRight size={13} />
-            </summary>
-            <p>由演示者代填；不代表系统识别到了患者回应。</p>
-            <div className="feedback-buttons">
-              {(
-                [
-                  ['responded', '已回应'],
-                  ['declined', '拒绝提醒'],
-                  ['help', '请求帮助'],
-                ] as const
-              ).map(([feedback, label]) => (
+              </summary>
+              <p>
+                仅在你已实际核查对象情况后使用。此操作记录人工处置，不代表系统识别到风险解除。
+              </p>
+              <div>
+                <Input
+                  aria-label={`${event.id} 人工核查说明`}
+                  maxLength={200}
+                  value={review}
+                  onChange={(e) => setReview(e.target.value)}
+                  placeholder="填写实际核查情况与处置结果"
+                />
                 <Button
-                  key={feedback}
+                  variant="outline"
                   size="sm"
-                  variant="secondary"
+                  disabled={!review.trim()}
                   onClick={() =>
                     dispatch({
-                      type: 'feedback',
+                      type: 'review-close',
                       id: event.id,
-                      feedback,
+                      note: review,
                       now: now(),
                     })
                   }
                 >
-                  {label}
+                  记录核查并结束
                 </Button>
-              ))}
-            </div>
+              </div>
+            </details>
+          )}
+          <details className="feedback-details">
+            <summary>
+              标记误报 <ChevronRight size={13} />
+            </summary>
+            <p>误报只作为人工标注，不会覆盖持续存在的异常输入。</p>
             <div className="false-alarm-form">
               <Input
                 aria-label={`${event.id} 误报原因`}
@@ -337,6 +414,7 @@ export default function CareDashboard() {
       clockRef.current.epoch + performance.now() - clockRef.current.monotonic,
     );
   }, []);
+  useAIEventOrchestrator(state.events, dispatch, now);
   const zones = useZoneMonitor(dispatch, now);
   const tickZones = zones.tick;
   useEffect(() => {
@@ -439,6 +517,10 @@ export default function CareDashboard() {
             <Settings2 size={18} />
             输入模拟
           </a>
+          <a className="nav-item" href="#ai-decision">
+            <Shield size={18} />
+            AI 文字决策
+          </a>
           <a className="nav-item" href="#log">
             <ListChecks size={18} />
             决策记录
@@ -450,7 +532,7 @@ export default function CareDashboard() {
         </nav>
         <div className="sidebar-bottom">
           <span className="dot" />
-          原型开发 · 第 04 部分<small>统一事件与完整流程框架</small>
+          原型开发 · 第 05 部分<small>患者反馈闭环与渐进式再决策</small>
         </div>
       </aside>
       <main className="workspace" id="main-content">
@@ -568,6 +650,16 @@ export default function CareDashboard() {
             </p>
           </section>
         </div>
+        <TextDecisionPanel
+          onDecision={(text, result) =>
+            dispatch({
+              type: 'manual-ai-event',
+              text,
+              decision: decisionPayload(result),
+              now: now(),
+            })
+          }
+        />
         <FrameworkPanel state={state} />
         <section className="panel simulator-panel" id="simulator">
           <div className="panel-heading">
@@ -700,30 +792,52 @@ export default function CareDashboard() {
             <h2>相同风险，不同支持。</h2>
             <p>能力预设由演示者选择，只影响新事件，不用于诊断。</p>
           </div>
-          <div>
-            <label htmlFor="profile">支持方式预设</label>
-            <NativeSelect
-              id="profile"
-              className="profile-select"
-              value={state.profile}
-              onChange={(e) =>
-                dispatch({
-                  type: 'profile',
-                  profile: e.target.value as Profile,
-                  now: now(),
-                })
-              }
-            >
-              <NativeSelectOption value="voice">
-                可理解简短提醒 · 从 I1 开始
-              </NativeSelectOption>
-              <NativeSelectOption value="visual">
-                需要图示支持 · 从 I2 开始
-              </NativeSelectOption>
-            </NativeSelect>
+          <div className="context-controls">
+            <div>
+              <label htmlFor="scene">当前监测场景</label>
+              <NativeSelect
+                id="scene"
+                className="profile-select"
+                value={state.scene}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'scene',
+                    scene: e.target.value as CareScene,
+                    now: now(),
+                  })
+                }
+              >
+                {CARE_SCENES.map((scene) => (
+                  <NativeSelectOption value={scene} key={scene}>
+                    {scene}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
+            <div>
+              <label htmlFor="profile">患者能力预设</label>
+              <NativeSelect
+                id="profile"
+                className="profile-select"
+                value={state.profile}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'profile',
+                    profile: e.target.value as Profile,
+                    now: now(),
+                  })
+                }
+              >
+                <NativeSelectOption value="voice">
+                  可理解简短提醒，可主动求助 · 从 I1 开始
+                </NativeSelectOption>
+                <NativeSelectOption value="visual">
+                  需要分步图示，求助能力待确认 · 从 I2 开始
+                </NativeSelectOption>
+              </NativeSelect>
+            </div>
             <small>
-              普通异常持续 5 秒确认；提示呈现后 20
-              秒未回应且证据仍有效，再增加支持。
+              新事件和反馈变化都会更新统一文字上下文并进入本机AI串行队列；AI不可用时反馈状态机仍可运行。
             </small>
           </div>
         </section>

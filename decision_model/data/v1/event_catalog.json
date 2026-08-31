@@ -1,0 +1,1294 @@
+{
+  "dataset": "active-care-synthetic-text-decisions",
+  "version": 1,
+  "synthetic": true,
+  "policy_version": "synthetic-care-policy-v1",
+  "scenes": [
+    {
+      "id": "kitchen",
+      "name": "厨房",
+      "events": [
+        {
+          "id": "k01",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "患者按日常步骤准备简单餐食，动作平稳",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "k02",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "灶具处于关闭状态，患者已经离开灶台",
+          "source": "sensor",
+          "channel": "stove",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "k03",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "烟雾与燃气输入均为正常状态",
+          "source": "sensor",
+          "channel": "air_alarm",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "k04",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "患者靠近灶台观察，但尚未进行危险操作",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "k05",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "患者在厨房内反复改变行走方向",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "k06",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "厨房温度持续高于演示舒适范围",
+          "source": "sensor",
+          "channel": "temperature",
+          "tags": [
+            "environment"
+          ]
+        },
+        {
+          "id": "k07",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "厨房环境输入中断，当前状态无法确认",
+          "source": "system",
+          "channel": "device",
+          "tags": [
+            "unknown"
+          ]
+        },
+        {
+          "id": "k08",
+          "risk": "L2",
+          "minimum_intervention": "I1",
+          "text": "患者在开启的灶台附近持续停留",
+          "source": "camera",
+          "channel": "stove",
+          "tags": [
+            "dwell"
+          ]
+        },
+        {
+          "id": "k09",
+          "risk": "L2",
+          "minimum_intervention": "I1",
+          "text": "患者短时间内重复操作同一个灶具开关",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "repetition"
+          ]
+        },
+        {
+          "id": "k10",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "患者伸手接近高温锅具区域",
+          "source": "camera",
+          "channel": "reach",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "k11",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "患者准备离开厨房，但灶具仍显示开启",
+          "source": "sensor",
+          "channel": "stove",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "k12",
+          "risk": "L3",
+          "minimum_intervention": "I3",
+          "text": "锅具持续加热且附近没有人员照看",
+          "source": "sensor",
+          "channel": "cooking",
+          "tags": [
+            "protection"
+          ]
+        },
+        {
+          "id": "k13",
+          "risk": "L3",
+          "minimum_intervention": "I3",
+          "text": "患者衣物或身体长时间靠近明火区域",
+          "source": "camera",
+          "channel": "reach",
+          "tags": [
+            "protection"
+          ]
+        },
+        {
+          "id": "k14",
+          "risk": "L3",
+          "minimum_intervention": "I4",
+          "text": "患者在厨房出现快速下降并保持低位姿态",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "fall"
+          ]
+        },
+        {
+          "id": "k15",
+          "risk": "L3",
+          "minimum_intervention": "I2",
+          "text": "厨房出口被临时物品遮挡，通行空间不足",
+          "source": "manual",
+          "channel": "exit",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "k16",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "独立烟雾报警输入被触发",
+          "source": "sensor",
+          "channel": "air_alarm",
+          "tags": [
+            "urgent",
+            "smoke"
+          ]
+        },
+        {
+          "id": "k17",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "独立燃气报警输入被触发",
+          "source": "sensor",
+          "channel": "air_alarm",
+          "tags": [
+            "urgent",
+            "gas"
+          ]
+        },
+        {
+          "id": "k18",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "人工确认灶台附近出现明火失控迹象",
+          "source": "manual",
+          "channel": "fire",
+          "tags": [
+            "urgent",
+            "fire"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bathroom",
+      "name": "卫生间",
+      "events": [
+        {
+          "id": "b01",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "患者正常进入卫生间并保持稳定行走",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "b02",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "患者完成洗漱后正常离开卫生间",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "b03",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "地面干燥且通行区域没有明显障碍",
+          "source": "manual",
+          "channel": "floor",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "b04",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "患者在洗手台附近停留时间略长",
+          "source": "camera",
+          "channel": "dwell",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "b05",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "患者进入卫生间后移动速度比平时慢",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "b06",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "卫生间照明不足，人体关键点识别质量下降",
+          "source": "system",
+          "channel": "device",
+          "tags": [
+            "unknown"
+          ]
+        },
+        {
+          "id": "b07",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "卫生间地面被人工标记为潮湿",
+          "source": "manual",
+          "channel": "floor",
+          "tags": [
+            "environment"
+          ]
+        },
+        {
+          "id": "b08",
+          "risk": "L2",
+          "minimum_intervention": "I1",
+          "text": "患者在卫生间内停留超过预设观察时间",
+          "source": "camera",
+          "channel": "dwell",
+          "tags": [
+            "dwell"
+          ]
+        },
+        {
+          "id": "b09",
+          "risk": "L2",
+          "minimum_intervention": "I1",
+          "text": "热水温度高于原型演示范围",
+          "source": "sensor",
+          "channel": "water",
+          "tags": [
+            "environment"
+          ]
+        },
+        {
+          "id": "b10",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "患者起身时身体出现持续摇晃",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "instability"
+          ]
+        },
+        {
+          "id": "b11",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "患者连续多次开关水龙头",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "repetition"
+          ]
+        },
+        {
+          "id": "b12",
+          "risk": "L3",
+          "minimum_intervention": "I3",
+          "text": "持续出水已经接近地面积水阈值",
+          "source": "sensor",
+          "channel": "water",
+          "tags": [
+            "protection"
+          ]
+        },
+        {
+          "id": "b13",
+          "risk": "L3",
+          "minimum_intervention": "I2",
+          "text": "患者踩入已标记的湿滑区域",
+          "source": "camera",
+          "channel": "floor",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "b14",
+          "risk": "L3",
+          "minimum_intervention": "I4",
+          "text": "患者出现快速下降并保持倒地候选姿态",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "fall"
+          ]
+        },
+        {
+          "id": "b15",
+          "risk": "L3",
+          "minimum_intervention": "I4",
+          "text": "卫生间门处于锁闭状态且存在待核查异常事件",
+          "source": "sensor",
+          "channel": "door",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "b16",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "人工确认患者发生严重烫伤风险",
+          "source": "manual",
+          "channel": "water",
+          "tags": [
+            "urgent"
+          ]
+        },
+        {
+          "id": "b17",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "卫生间电气区域触发烟雾报警输入",
+          "source": "sensor",
+          "channel": "air_alarm",
+          "tags": [
+            "urgent",
+            "smoke"
+          ]
+        },
+        {
+          "id": "b18",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "卫生间门磁或水温输入处于故障状态",
+          "source": "system",
+          "channel": "device",
+          "tags": [
+            "unknown"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bedroom",
+      "name": "卧室",
+      "events": [
+        {
+          "id": "d01",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "患者在床上正常休息，姿态变化平稳",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "d02",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "患者醒来后坐在床边并保持稳定",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "d03",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "卧室门与窗均处于预设正常状态",
+          "source": "sensor",
+          "channel": "opening",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "d04",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "患者夜间短暂坐起后继续观察周围",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "d05",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "患者多次调整睡姿，尚未离开床区",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "d06",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "卧室光线不足导致姿态观测质量下降",
+          "source": "system",
+          "channel": "device",
+          "tags": [
+            "unknown"
+          ]
+        },
+        {
+          "id": "d07",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "卧室温度持续偏离演示舒适范围",
+          "source": "sensor",
+          "channel": "temperature",
+          "tags": [
+            "environment"
+          ]
+        },
+        {
+          "id": "d08",
+          "risk": "L2",
+          "minimum_intervention": "I1",
+          "text": "患者在夜间离开床区并停留在床边",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "dwell"
+          ]
+        },
+        {
+          "id": "d09",
+          "risk": "L2",
+          "minimum_intervention": "I1",
+          "text": "患者离床后长时间没有返回休息区域",
+          "source": "camera",
+          "channel": "dwell",
+          "tags": [
+            "dwell"
+          ]
+        },
+        {
+          "id": "d10",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "患者在卧室内重复往返且路径不稳定",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "repetition"
+          ]
+        },
+        {
+          "id": "d11",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "患者尝试从低位姿态起身但动作不稳定",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "instability"
+          ]
+        },
+        {
+          "id": "d12",
+          "risk": "L3",
+          "minimum_intervention": "I3",
+          "text": "患者持续接近已标记的窗边限制区域",
+          "source": "camera",
+          "channel": "opening",
+          "tags": [
+            "protection"
+          ]
+        },
+        {
+          "id": "d13",
+          "risk": "L3",
+          "minimum_intervention": "I4",
+          "text": "患者从床边快速下降并保持低位姿态",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "fall"
+          ]
+        },
+        {
+          "id": "d14",
+          "risk": "L3",
+          "minimum_intervention": "I4",
+          "text": "患者位于床外地面且持续没有明显位移",
+          "source": "camera",
+          "channel": "floor",
+          "tags": [
+            "fall"
+          ]
+        },
+        {
+          "id": "d15",
+          "risk": "L3",
+          "minimum_intervention": "I2",
+          "text": "床边通道被物品遮挡，起身路径不完整",
+          "source": "manual",
+          "channel": "exit",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "d16",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "卧室烟雾报警输入被触发",
+          "source": "sensor",
+          "channel": "air_alarm",
+          "tags": [
+            "urgent",
+            "smoke"
+          ]
+        },
+        {
+          "id": "d17",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "人工确认患者出现需要立即协助的急性异常",
+          "source": "manual",
+          "channel": "health",
+          "tags": [
+            "urgent"
+          ]
+        },
+        {
+          "id": "d18",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "床区摄像头或门磁输入处于离线状态",
+          "source": "system",
+          "channel": "device",
+          "tags": [
+            "unknown"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "living_room",
+      "name": "客厅",
+      "events": [
+        {
+          "id": "l01",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "患者在客厅安静坐着并正常观看电视",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "l02",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "患者沿熟悉路线平稳经过客厅",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "l03",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "客厅通道清晰，环境输入处于正常状态",
+          "source": "manual",
+          "channel": "floor",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "l04",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "患者在客厅中央持续站立并观察周围",
+          "source": "camera",
+          "channel": "dwell",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "l05",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "患者短时间内重复经过同一路线",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "l06",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "客厅地面存在需要留意的零散物品",
+          "source": "manual",
+          "channel": "floor",
+          "tags": [
+            "environment"
+          ]
+        },
+        {
+          "id": "l07",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "客厅摄像头画面受到局部遮挡",
+          "source": "system",
+          "channel": "device",
+          "tags": [
+            "unknown"
+          ]
+        },
+        {
+          "id": "l08",
+          "risk": "L2",
+          "minimum_intervention": "I1",
+          "text": "患者离开预设活动区域后持续未返回",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "dwell"
+          ]
+        },
+        {
+          "id": "l09",
+          "risk": "L2",
+          "minimum_intervention": "I1",
+          "text": "患者坐在沙发上长时间没有姿态变化",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "dwell"
+          ]
+        },
+        {
+          "id": "l10",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "患者身体持续前倾并多次尝试起身",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "instability"
+          ]
+        },
+        {
+          "id": "l11",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "客厅门保持打开且患者正在接近门口",
+          "source": "sensor",
+          "channel": "door",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "l12",
+          "risk": "L3",
+          "minimum_intervention": "I3",
+          "text": "患者踩上不稳定家具并试图向高处伸手",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "protection"
+          ]
+        },
+        {
+          "id": "l13",
+          "risk": "L3",
+          "minimum_intervention": "I3",
+          "text": "取暖设备持续开启且周围存在易燃物",
+          "source": "sensor",
+          "channel": "heater",
+          "tags": [
+            "protection"
+          ]
+        },
+        {
+          "id": "l14",
+          "risk": "L3",
+          "minimum_intervention": "I4",
+          "text": "患者出现快速下降并保持横卧候选姿态",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "fall"
+          ]
+        },
+        {
+          "id": "l15",
+          "risk": "L3",
+          "minimum_intervention": "I2",
+          "text": "患者持续触碰被标记为不安全的电源区域",
+          "source": "camera",
+          "channel": "electric",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "l16",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "客厅烟雾报警输入被触发",
+          "source": "sensor",
+          "channel": "air_alarm",
+          "tags": [
+            "urgent",
+            "smoke"
+          ]
+        },
+        {
+          "id": "l17",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "人工确认患者突然倒地并需要立即核查",
+          "source": "manual",
+          "channel": "health",
+          "tags": [
+            "urgent",
+            "fall"
+          ]
+        },
+        {
+          "id": "l18",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "客厅环境采样设备处于故障状态",
+          "source": "system",
+          "channel": "device",
+          "tags": [
+            "unknown"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entrance",
+      "name": "入户门区域",
+      "events": [
+        {
+          "id": "e01",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "患者在预定时间经过入户门区域",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "e02",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "患者从门外返回并正常进入室内",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "e03",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "入户门处于关闭状态且没有越线事件",
+          "source": "sensor",
+          "channel": "door",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "e04",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "患者靠近入户门并短暂停留",
+          "source": "camera",
+          "channel": "dwell",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "e05",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "入户门短暂打开后仍处于观察阶段",
+          "source": "sensor",
+          "channel": "door",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "e06",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "患者在门口反复查看周围环境",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "e07",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "入户门摄像头或门磁状态无法确认",
+          "source": "system",
+          "channel": "device",
+          "tags": [
+            "unknown"
+          ]
+        },
+        {
+          "id": "e08",
+          "risk": "L2",
+          "minimum_intervention": "I1",
+          "text": "患者短时间内多次操作门把手",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "repetition"
+          ]
+        },
+        {
+          "id": "e09",
+          "risk": "L2",
+          "minimum_intervention": "I1",
+          "text": "入户门持续打开并超过预设观察时间",
+          "source": "sensor",
+          "channel": "door",
+          "tags": [
+            "dwell"
+          ]
+        },
+        {
+          "id": "e10",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "患者穿过门口边界并向室外方向移动",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "e11",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "未经确认的访客正在门外持续停留",
+          "source": "manual",
+          "channel": "visitor",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "e12",
+          "risk": "L3",
+          "minimum_intervention": "I3",
+          "text": "患者持续尝试打开被标记为限制区域的门",
+          "source": "camera",
+          "channel": "door",
+          "tags": [
+            "protection"
+          ]
+        },
+        {
+          "id": "e13",
+          "risk": "L3",
+          "minimum_intervention": "I2",
+          "text": "患者已经离开室内且超过预设返回时间",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "e14",
+          "risk": "L3",
+          "minimum_intervention": "I4",
+          "text": "患者在门槛附近出现快速下降并保持低位姿态",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "fall"
+          ]
+        },
+        {
+          "id": "e15",
+          "risk": "L3",
+          "minimum_intervention": "I2",
+          "text": "门口通道被物品阻挡并影响正常通行",
+          "source": "manual",
+          "channel": "exit",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "e16",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "入户门附近烟雾报警输入被触发",
+          "source": "sensor",
+          "channel": "air_alarm",
+          "tags": [
+            "urgent",
+            "smoke"
+          ]
+        },
+        {
+          "id": "e17",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "人工确认患者在室外处于立即需要协助的状态",
+          "source": "manual",
+          "channel": "health",
+          "tags": [
+            "urgent"
+          ]
+        },
+        {
+          "id": "e18",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "门磁数据过期，无法判断门是否已经关闭",
+          "source": "system",
+          "channel": "device",
+          "tags": [
+            "unknown"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "balcony",
+      "name": "阳台",
+      "events": [
+        {
+          "id": "a01",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "患者正常进入阳台并在安全区域内活动",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "a02",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "患者完成浇花后正常返回室内",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "a03",
+          "risk": "L0",
+          "minimum_intervention": "I0",
+          "text": "阳台门与地面状态符合预设正常条件",
+          "source": "sensor",
+          "channel": "door",
+          "tags": [
+            "normal"
+          ]
+        },
+        {
+          "id": "a04",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "患者靠近阳台边缘观察区域但仍在安全线内",
+          "source": "camera",
+          "channel": "dwell",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "a05",
+          "risk": "L1",
+          "minimum_intervention": "I0",
+          "text": "患者在阳台停留时间略长",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "observe"
+          ]
+        },
+        {
+          "id": "a06",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "阳台光照变化导致关键点识别质量下降",
+          "source": "system",
+          "channel": "device",
+          "tags": [
+            "unknown"
+          ]
+        },
+        {
+          "id": "a07",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "人工标记阳台地面存在少量积水",
+          "source": "manual",
+          "channel": "floor",
+          "tags": [
+            "environment"
+          ]
+        },
+        {
+          "id": "a08",
+          "risk": "L2",
+          "minimum_intervention": "I1",
+          "text": "患者在阳台持续停留并多次查看室外",
+          "source": "camera",
+          "channel": "dwell",
+          "tags": [
+            "dwell"
+          ]
+        },
+        {
+          "id": "a09",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "患者站在湿滑区域并出现步态不稳",
+          "source": "camera",
+          "channel": "floor",
+          "tags": [
+            "instability"
+          ]
+        },
+        {
+          "id": "a10",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "患者位于阳台外侧且阳台门意外关闭",
+          "source": "sensor",
+          "channel": "door",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "a11",
+          "risk": "L2",
+          "minimum_intervention": "I2",
+          "text": "患者反复接近预设边界后又返回",
+          "source": "camera",
+          "channel": "movement",
+          "tags": [
+            "repetition"
+          ]
+        },
+        {
+          "id": "a12",
+          "risk": "L3",
+          "minimum_intervention": "I3",
+          "text": "患者踩上椅子并靠近阳台边缘",
+          "source": "camera",
+          "channel": "activity",
+          "tags": [
+            "protection"
+          ]
+        },
+        {
+          "id": "a13",
+          "risk": "L3",
+          "minimum_intervention": "I3",
+          "text": "患者身体持续越过预设栏杆安全线",
+          "source": "camera",
+          "channel": "boundary",
+          "tags": [
+            "protection"
+          ]
+        },
+        {
+          "id": "a14",
+          "risk": "L3",
+          "minimum_intervention": "I4",
+          "text": "患者在阳台出现快速下降并保持低位姿态",
+          "source": "camera",
+          "channel": "posture",
+          "tags": [
+            "fall"
+          ]
+        },
+        {
+          "id": "a15",
+          "risk": "L3",
+          "minimum_intervention": "I2",
+          "text": "阳台返回室内的通道被物品遮挡",
+          "source": "manual",
+          "channel": "exit",
+          "tags": [
+            "hazard"
+          ]
+        },
+        {
+          "id": "a16",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "阳台附近烟雾报警输入被触发",
+          "source": "sensor",
+          "channel": "air_alarm",
+          "tags": [
+            "urgent",
+            "smoke"
+          ]
+        },
+        {
+          "id": "a17",
+          "risk": "L4",
+          "minimum_intervention": "I4",
+          "text": "人工确认患者处于可能从高处坠落的紧急状态",
+          "source": "manual",
+          "channel": "boundary",
+          "tags": [
+            "urgent"
+          ]
+        },
+        {
+          "id": "a18",
+          "risk": "L1",
+          "minimum_intervention": "I1",
+          "text": "阳台门磁或摄像头输入处于离线状态",
+          "source": "system",
+          "channel": "device",
+          "tags": [
+            "unknown"
+          ]
+        }
+      ]
+    }
+  ],
+  "capabilities": {
+    "independent": "能够理解简短语音，也能够主动按键求助",
+    "visual_support": "理解语音不稳定，需要图示和分步骤引导",
+    "limited": "难以稳定理解提醒，也不能可靠地主动求助",
+    "unknown": "当前没有足够资料判断理解和主动求助能力"
+  },
+  "responses": {
+    "not_requested": "尚未发出提醒，因此没有回应记录",
+    "responded": "患者已经确认收到提醒，但相关事件仍需继续观察",
+    "changed_behavior": "患者在提醒后改变了行为，但异常证据尚未完全解除",
+    "no_response": "已发出的提醒没有获得可确认的回应",
+    "declined": "患者明确拒绝当前提醒，系统不能据此推断其没有理解",
+    "requested_help": "患者或现场人员主动提出需要帮助",
+    "unknown": "当前观测不足，无法判断患者是否回应"
+  },
+  "previous_interventions": {
+    "none": {
+      "text": "此前没有执行干预",
+      "result": "none"
+    },
+    "I0_effective": {
+      "text": "上一次仅观察，未发现新的升级证据",
+      "result": "effective"
+    },
+    "I1_effective": {
+      "text": "上一次I1温和提醒已经产生行为变化",
+      "result": "effective"
+    },
+    "I1_ineffective": {
+      "text": "上一次I1温和提醒没有产生可确认效果",
+      "result": "ineffective"
+    },
+    "I2_effective": {
+      "text": "上一次I2图示引导已经产生行为变化",
+      "result": "effective"
+    },
+    "I2_ineffective": {
+      "text": "上一次I2图示引导没有产生可确认效果",
+      "result": "ineffective"
+    },
+    "I2_failed": {
+      "text": "上一次I2图示引导未能成功呈现",
+      "result": "failed"
+    },
+    "I3_unavailable": {
+      "text": "上一次I3保护请求因设备未接入而不可用",
+      "result": "unavailable"
+    },
+    "I4_pending": {
+      "text": "上一次I4网页求助仍在等待人工接手",
+      "result": "pending"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "dataset": "active-care-synthetic-text-decisions-v2",
+  "version": 2,
+  "seed": 20260830,
+  "policy_version": "synthetic-care-policy-v2",
+  "synthetic": true,
+  "scene_count": 6,
+  "event_definition_count": 180,
+  "seen_event_count": 150,
+  "ood_event_count": 30,
+  "primary_case_group_count": 6000,
+  "primary_sample_count": 30000,
+  "samples_per_split": {
+    "train": 21000,
+    "validation": 4500,
+    "test": 4500
+  },
+  "primary_samples_per_scene": {
+    "balcony": 5000,
+    "bathroom": 5000,
+    "bedroom": 5000,
+    "entrance": 5000,
+    "kitchen": 5000,
+    "living_room": 5000
+  },
+  "primary_samples_per_intervention": {
+    "I0": 6000,
+    "I1": 6000,
+    "I2": 6000,
+    "I3": 6000,
+    "I4": 6000
+  },
+  "primary_samples_per_alert_mode": {
+    "NONE": 4740,
+    "PAGE_WARNING": 19260,
+    "URGENT_HELP": 6000
+  },
+  "primary_groups_per_case_type": {
+    "conflict_unknown": 600,
+    "counterfactual": 1200,
+    "hard": 600,
+    "regular": 3600
+  },
+  "ood_test_sample_count": 1200,
+  "natural_test_sample_count": 1200,
+  "natural_test_interventions": {
+    "I0": 480,
+    "I1": 300,
+    "I2": 240,
+    "I3": 120,
+    "I4": 60
+  },
+  "all_sample_count": 32400,
+  "warning": "全部标签来自可审计的合成策略，只适合软件与模型流程实验，不代表真实照护、医学、消防或紧急处置标准。"
+}

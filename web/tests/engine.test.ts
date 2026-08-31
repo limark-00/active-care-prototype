@@ -9,9 +9,11 @@ import {
 } from '../lib/care/engine.ts';
 import { currentOutput } from '../lib/care/outputs.ts';
 import { buildSessionReport } from '../lib/care/session.ts';
+import { buildDecisionText, decisionRequestKey } from '../lib/care/ai.ts';
 import { initialZoneState } from '../lib/zones.ts';
 import type {
   CareState,
+  AIDecisionPayload,
   EnvironmentInput,
   EventKind,
   VisionEvidence,
@@ -91,15 +93,19 @@ await test('acknowledgement is not closure and prevents repeated unattended esca
 });
 await test('refusal does not cause restriction, false closure, or automatic support escalation', () => {
   let s = advance(initialState(), 0, 5000, { humidity: 80 });
+  s = deliver(s, event(s, 'humidity').id, 5000);
+  const requestKey = currentOutput(s, event(s, 'humidity'))!.requestKey;
   s = careReducer(s, {
     type: 'feedback',
     id: event(s, 'humidity').id,
     feedback: 'declined',
-    now: 5000,
+    requestKey,
+    now: 6000,
   });
-  s = advance(s, 6000, 40000, { humidity: 80 });
+  s = advance(s, 7000, 40000, { humidity: 80 });
   assert.equal(event(s, 'humidity').intervention, 'I1');
   assert.equal(event(s, 'humidity').risk, 'L2');
+  assert.equal(event(s, 'humidity').feedbackHistory.length, 1);
 });
 await test('explicit manual help request creates I4 even for lower risk', () => {
   let s = sample(initialState(), 0, { temperature: 32 });
@@ -111,6 +117,111 @@ await test('explicit manual help request creates I4 even for lower risk', () => 
   });
   assert.equal(event(s, 'temperature').intervention, 'I4');
   assert.equal(event(s, 'temperature').risk, 'L1');
+});
+await test('patient feedback is bound to a presented intervention, while help is always accepted', () => {
+  let s = advance(initialState(), 0, 5000, { temperature: 32 });
+  const e = event(s, 'temperature');
+  const pendingKey = currentOutput(s, e)!.requestKey;
+  s = careReducer(s, {
+    type: 'feedback',
+    id: e.id,
+    feedback: 'responded',
+    requestKey: pendingKey,
+    now: 5000,
+  });
+  assert.equal(event(s, 'temperature').feedback, 'none');
+  assert.equal(event(s, 'temperature').feedbackHistory.length, 0);
+  assert.match(s.notice, /尚未在网页呈现/);
+  s = careReducer(s, {
+    type: 'feedback',
+    id: e.id,
+    feedback: 'help',
+    requestKey: pendingKey,
+    now: 5000,
+  });
+  assert.equal(event(s, 'temperature').intervention, 'I4');
+  assert.equal(event(s, 'temperature').risk, 'L2');
+  assert.equal(event(s, 'temperature').feedbackHistory.length, 1);
+});
+await test('responded feedback is verified against evidence and persistent risk opens a new round', () => {
+  let s = advance(initialState(), 0, 5000, { temperature: 32 });
+  const id = event(s, 'temperature').id;
+  s = deliver(s, id, 5000);
+  const firstKey = currentOutput(s, event(s, 'temperature'))!.requestKey;
+  s = careReducer(s, {
+    type: 'feedback',
+    id,
+    feedback: 'improved',
+    requestKey: firstKey,
+    now: 6000,
+  });
+  assert.equal(event(s, 'temperature').intervention, 'I1');
+  assert.equal(
+    event(s, 'temperature').feedbackHistory[0].outcome,
+    'pending_verification',
+  );
+  s = advance(s, 7000, 15000, { temperature: 32 });
+  assert.equal(event(s, 'temperature').intervention, 'I1');
+  s = sample(s, 16000, { temperature: 32 });
+  assert.equal(event(s, 'temperature').intervention, 'I2');
+  assert.equal(event(s, 'temperature').risk, 'L2');
+  assert.equal(event(s, 'temperature').feedbackHistory.length, 2);
+  assert.equal(
+    event(s, 'temperature').feedbackHistory[1].outcome,
+    'risk_persisted',
+  );
+
+  s = careReducer(s, {
+    type: 'feedback',
+    id,
+    feedback: 'declined',
+    requestKey: firstKey,
+    now: 16001,
+  });
+  assert.match(s.notice, /已经结束的干预轮次/);
+  assert.equal(event(s, 'temperature').feedbackHistory.length, 2);
+
+  s = deliver(s, id, 16001);
+  s = advance(s, 17000, 36000, { temperature: 32 });
+  s = sample(s, 36001, { temperature: 32 });
+  assert.equal(event(s, 'temperature').intervention, 'I4');
+  assert.equal(event(s, 'temperature').feedbackHistory.length, 3);
+  s = sample(s, 36002, { temperature: 32 });
+  assert.equal(event(s, 'temperature').feedbackHistory.length, 3);
+});
+await test('reported improvement never clears risk, but later normal evidence verifies recovery', () => {
+  let s = advance(initialState(), 0, 5000, { temperature: 32 });
+  const id = event(s, 'temperature').id;
+  s = deliver(s, id, 5000);
+  s = careReducer(s, {
+    type: 'feedback',
+    id,
+    feedback: 'improved',
+    requestKey: currentOutput(s, event(s, 'temperature'))!.requestKey,
+    now: 6000,
+  });
+  assert.equal(event(s, 'temperature').phase, 'WAITING_RESPONSE');
+  s = sample(s, 7000, { temperature: 24 });
+  assert.equal(event(s, 'temperature').phase, 'RECOVERING');
+  assert.equal(
+    event(s, 'temperature').feedbackHistory[0].outcome,
+    'verified_recovery',
+  );
+});
+await test('visual-support profile uses a shorter response window without changing risk', () => {
+  let s = careReducer(initialState(), {
+    type: 'profile',
+    profile: 'visual',
+    now: 0,
+  });
+  s = advance(s, 0, 5000, { humidity: 80 });
+  const id = event(s, 'humidity').id;
+  s = deliver(s, id, 5000);
+  s = advance(s, 6000, 19000, { humidity: 80 });
+  assert.equal(event(s, 'humidity').intervention, 'I2');
+  s = sample(s, 20000, { humidity: 80 });
+  assert.equal(event(s, 'humidity').intervention, 'I4');
+  assert.equal(event(s, 'humidity').risk, 'L2');
 });
 await test('offline input retains smoke alarm and separately raises a device event', () => {
   let s = sample(initialState(), 0, { smoke: 'alarm' });
@@ -478,7 +589,15 @@ await test('overview derives monitoring, support and recovery without conflating
 await test('session report contains decision/evidence/output history without frames or backend tokens', () => {
   let s = sample(initialState(), 0, { gas: 'alarm' });
   s = camera(s, vision(0, true), 0);
-  s = deliver(s, event(s, 'gas').id, 0);
+  const gasId = event(s, 'gas').id;
+  s = deliver(s, gasId, 0);
+  s = careReducer(s, {
+    type: 'feedback',
+    id: gasId,
+    feedback: 'help',
+    requestKey: currentOutput(s, event(s, 'gas'))!.requestKey,
+    now: 0,
+  });
   const zones = {
     ...initialZoneState(),
     observation: { privateToken: 'DO_NOT_EXPORT', pixels: 'DO_NOT_EXPORT' },
@@ -488,12 +607,276 @@ await test('session report contains decision/evidence/output history without fra
     { ...s, extraImage: 'DO_NOT_EXPORT' } as CareState,
     zones as unknown as ReturnType<typeof initialZoneState>,
   );
-  assert.equal(report.formatVersion, 3);
+  assert.equal(report.formatVersion, 5);
   assert.equal(report.events.length, 2);
   assert.equal(
     report.actions.some((a) => a.status === 'executed'),
     true,
   );
   assert.equal(report.boundaries.imagesIncluded, false);
+  assert.equal(report.boundaries.rawManualTextIncluded, false);
+  assert.match(report.boundaries.feedback, /caregiver-entered/);
+  assert.equal(
+    report.events.find((item) => item.id === gasId)!.feedbackHistory.length,
+    1,
+  );
   assert.equal(JSON.stringify(report).includes('DO_NOT_EXPORT'), false);
+});
+
+const aiDecision = (
+  patch: Partial<AIDecisionPayload> = {},
+): AIDecisionPayload => ({
+  model: 'fixture-v31',
+  runName: 'fixture-run',
+  device: 'cpu',
+  inferenceMs: 12.5,
+  risk: 'L2',
+  intervention: 'I2',
+  alertMode: 'PAGE_WARNING',
+  manualReview: false,
+  abstain: false,
+  riskConfidence: 0.9,
+  interventionConfidence: 0.88,
+  alertConfidence: 0.92,
+  reviewReasons: [],
+  ...patch,
+});
+
+await test('early AI output cannot bypass the later capability-based rule floor', () => {
+  let s = careReducer(initialState(), {
+    type: 'profile',
+    profile: 'visual',
+    now: 0,
+  });
+  s = sample(s, 0, { temperature: 32 });
+  const id = event(s, 'temperature').id;
+  const key = decisionRequestKey(event(s, 'temperature'));
+  s = careReducer(s, { type: 'ai-start', id, requestKey: key, now: 1 });
+  s = careReducer(s, {
+    type: 'ai-result',
+    id,
+    requestKey: key,
+    decision: aiDecision({ risk: 'L2', intervention: 'I1' }),
+    now: 2,
+  });
+  assert.equal(event(s, 'temperature').intervention, 'I2');
+  s = advance(s, 1000, 5000, { temperature: 32 });
+  assert.deepEqual(event(s, 'temperature').ruleDecision, {
+    risk: 'L2',
+    intervention: 'I2',
+    reason: '档案预设需要图示支持。',
+  });
+  assert.equal(event(s, 'temperature').intervention, 'I2');
+  assert.equal(event(s, 'temperature').risk, 'L2');
+});
+
+await test('feedback revisions archive stale AI results and queue only the new context', () => {
+  let s = advance(initialState(), 0, 5000, { temperature: 32 });
+  const id = event(s, 'temperature').id;
+  s = deliver(s, id, 5000);
+  const responseKey = currentOutput(s, event(s, 'temperature'))!.requestKey;
+  const oldAIKey = decisionRequestKey(event(s, 'temperature'));
+  s = careReducer(s, {
+    type: 'ai-start',
+    id,
+    requestKey: oldAIKey,
+    now: 5001,
+  });
+  s = careReducer(s, {
+    type: 'feedback',
+    id,
+    feedback: 'responded',
+    requestKey: responseKey,
+    now: 5002,
+  });
+  assert.equal(event(s, 'temperature').context.revision, 1);
+  const newAIKey = decisionRequestKey(event(s, 'temperature'));
+  assert.notEqual(newAIKey, oldAIKey);
+  assert.doesNotMatch(buildDecisionText(event(s, 'temperature').context), /I1/);
+  assert.match(
+    buildDecisionText(event(s, 'temperature').context),
+    /温和提醒.*当前回应和现场证据/,
+  );
+  s = careReducer(s, {
+    type: 'ai-result',
+    id,
+    requestKey: oldAIKey,
+    decision: aiDecision({ risk: 'L4', intervention: 'I4' }),
+    now: 5003,
+  });
+  assert.equal(event(s, 'temperature').aiDecision, null);
+  assert.equal(event(s, 'temperature').aiDecisionHistory.length, 1);
+  assert.equal(event(s, 'temperature').aiDecisionHistory[0].applied, false);
+  assert.equal(event(s, 'temperature').risk, 'L2');
+  assert.equal(event(s, 'temperature').intervention, 'I1');
+
+  s = careReducer(s, {
+    type: 'ai-start',
+    id,
+    requestKey: newAIKey,
+    now: 5004,
+  });
+  s = careReducer(s, {
+    type: 'ai-result',
+    id,
+    requestKey: newAIKey,
+    decision: aiDecision({ risk: 'L2', intervention: 'I1' }),
+    now: 5005,
+  });
+  assert.equal(event(s, 'temperature').aiDecision?.status, 'completed');
+  assert.equal(event(s, 'temperature').aiDecision?.requestKey, newAIKey);
+});
+
+await test('all automatic sources carry one normalized AI context without rule-label leakage', () => {
+  const s = sample(initialState(), 0, { temperature: 32 });
+  const e = event(s, 'temperature');
+  assert.equal(e.context.schemaVersion, 2);
+  assert.equal(e.context.revision, 0);
+  assert.equal(e.context.eventId, e.id);
+  assert.equal(e.context.source, 'simulated');
+  assert.equal(e.context.scene, '客厅');
+  assert.equal(e.aiDecision, null);
+  assert.deepEqual(e.ruleDecision, {
+    risk: 'L1',
+    intervention: 'I0',
+    reason: '异常刚出现，先连续确认。',
+  });
+  const text = buildDecisionText(e.context);
+  assert.match(text, /地点：客厅/);
+  assert.match(text, /模拟传感器/);
+  assert.doesNotMatch(text, /规则基线|L1|I0/);
+  assert.equal(decisionRequestKey(e), `${e.id}:2:0:0`);
+});
+
+await test('AI may raise an ordinary event but can never lower the rule safety floor', () => {
+  let s = sample(initialState(), 0, { temperature: 32 });
+  let e = event(s, 'temperature');
+  const key = decisionRequestKey(e);
+  s = careReducer(s, { type: 'ai-start', id: e.id, requestKey: key, now: 1 });
+  s = careReducer(s, {
+    type: 'ai-result',
+    id: e.id,
+    requestKey: key,
+    decision: aiDecision({ risk: 'L3', intervention: 'I3' }),
+    now: 2,
+  });
+  e = event(s, 'temperature');
+  assert.equal(e.risk, 'L3');
+  assert.equal(e.intervention, 'I3');
+  assert.equal(e.aiDecision?.status, 'completed');
+  assert.equal(e.aiDecision?.applied, true);
+
+  let urgentState = sample(initialState(), 0, { smoke: 'alarm' });
+  const urgentEvent = event(urgentState, 'smoke');
+  const urgentKey = decisionRequestKey(urgentEvent);
+  urgentState = careReducer(urgentState, {
+    type: 'ai-start',
+    id: urgentEvent.id,
+    requestKey: urgentKey,
+    now: 1,
+  });
+  urgentState = careReducer(urgentState, {
+    type: 'ai-result',
+    id: urgentEvent.id,
+    requestKey: urgentKey,
+    decision: aiDecision({
+      risk: 'L0',
+      intervention: 'I0',
+      alertMode: 'NONE',
+    }),
+    now: 2,
+  });
+  assert.equal(event(urgentState, 'smoke').risk, 'L4');
+  assert.equal(event(urgentState, 'smoke').intervention, 'I4');
+});
+
+await test('abstention, stale keys and AI failure preserve the deterministic event', () => {
+  let s = sample(initialState(), 0, { humidity: 80 });
+  const e = event(s, 'humidity');
+  const key = decisionRequestKey(e);
+  s = careReducer(s, { type: 'ai-start', id: e.id, requestKey: key, now: 1 });
+  const stale = careReducer(s, {
+    type: 'ai-result',
+    id: e.id,
+    requestKey: 'stale-key',
+    decision: aiDecision({ risk: 'L4', intervention: 'I4' }),
+    now: 2,
+  });
+  assert.equal(event(stale, 'humidity').aiDecision?.status, 'running');
+  s = careReducer(stale, {
+    type: 'ai-result',
+    id: e.id,
+    requestKey: key,
+    decision: aiDecision({
+      risk: 'L4',
+      intervention: 'I4',
+      abstain: true,
+      manualReview: true,
+    }),
+    now: 3,
+  });
+  assert.equal(event(s, 'humidity').risk, 'L1');
+  assert.equal(event(s, 'humidity').intervention, 'I0');
+  assert.equal(event(s, 'humidity').aiDecision?.applied, false);
+
+  let failed = sample(initialState(), 0, { temperature: 32 });
+  const failedEvent = event(failed, 'temperature');
+  const failedKey = decisionRequestKey(failedEvent);
+  failed = careReducer(failed, {
+    type: 'ai-start',
+    id: failedEvent.id,
+    requestKey: failedKey,
+    now: 1,
+  });
+  failed = careReducer(failed, {
+    type: 'ai-failed',
+    id: failedEvent.id,
+    requestKey: failedKey,
+    error: '模型缺失',
+    now: 2,
+  });
+  assert.equal(event(failed, 'temperature').risk, 'L1');
+  assert.equal(event(failed, 'temperature').aiDecision?.status, 'failed');
+  failed = careReducer(failed, {
+    type: 'ai-retry',
+    id: failedEvent.id,
+    now: 3,
+  });
+  assert.equal(event(failed, 'temperature').aiDecision, null);
+});
+
+await test('manual model results create reviewable events while L0/I0 creates no alert', () => {
+  const text = '地点：阳台。\n事件1（人工输入）：患者正在倚靠松动栏杆。';
+  let s = careReducer(initialState(), {
+    type: 'manual-ai-event',
+    text,
+    decision: aiDecision({ risk: 'L3', intervention: 'I3' }),
+    now: 1,
+  });
+  assert.equal(activeEvents(s).length, 1);
+  const e = activeEvents(s)[0];
+  assert.equal(e.source, 'manual');
+  assert.equal(e.context.scene, '阳台');
+  assert.equal(e.ruleDecision, null);
+  assert.equal(e.aiDecision?.applied, true);
+  assert.equal(canClose(e, s, 1), false);
+  s = careReducer(s, {
+    type: 'review-close',
+    id: e.id,
+    note: '已现场核查并移除风险物品',
+    now: 2,
+  });
+  assert.equal(activeEvents(s).length, 0);
+  const report = buildSessionReport(s, initialZoneState());
+  assert.equal(report.events[0].context.rawText, null);
+  assert.equal(JSON.stringify(report).includes('松动栏杆'), true);
+
+  const observation = careReducer(initialState(), {
+    type: 'manual-ai-event',
+    text: '地点：客厅。事件1：患者坐在沙发上阅读。',
+    decision: aiDecision({ risk: 'L0', intervention: 'I0', alertMode: 'NONE' }),
+    now: 1,
+  });
+  assert.equal(observation.events.length, 0);
+  assert.match(observation.logs[0].message, /不创建待处理事件/);
 });

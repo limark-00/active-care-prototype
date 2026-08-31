@@ -1,33 +1,16 @@
-# OS files
 .DS_Store
-
-# Dependencies and generated outputs
-node_modules/
-.venv/
 .pnpm-store/
-__pycache__/
-.pytest_cache/
-*.py[cod]
-*.tsbuildinfo
-.next/
-.vinext/
-dist/
-coverage/
-.wrangler/
-.runtime/
-test-artifacts/
+decision_model/outputs/
 
-# Local secrets and environment configuration
+# Python environments and generated caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local secrets and machine-specific environment files
 .env
 .env.*
 !.env.example
-!.env.sample
-*.pem
-*.key
-*.log
-
-# Model weights are downloaded and verified by vision/download_model.py
-vision/models/*.pt
-
-# Locally exported demo reports
-active-care-demo-session*.json

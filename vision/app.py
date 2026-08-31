@@ -10,12 +10,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import numpy as np
 from PIL import Image, UnidentifiedImageError
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from pose_logic import PoseTracker
 
 ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000']
 MAX_BYTES = 1_500_000
 SESSION_TTL = 120
+
+
+class DecisionRequest(BaseModel):
+    text: str = Field(min_length=10, max_length=6000)
 
 
 def decode_frame(data):
@@ -29,7 +34,7 @@ def decode_frame(data):
         raise HTTPException(400, '无效 JPEG，或画面尺寸超过限制。') from exc
 
 
-def create_app(detector_factory=None):
+def create_app(detector_factory=None, decision_factory=None):
     @asynccontextmanager
     async def lifespan(app):
         if detector_factory is None:
@@ -38,12 +43,20 @@ def create_app(detector_factory=None):
         else:
             factory = detector_factory
         app.state.detector = await run_in_threadpool(factory)
+        if decision_factory is None:
+            from decision_service import TextDecisionModel
+            app.state.decision_factory = TextDecisionModel
+        else:
+            app.state.decision_factory = decision_factory
         yield
         app.state.sessions.clear()
+        app.state.decision_runner = None
 
     app = FastAPI(title='Active Care Local Vision', lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.sessions = {}
     app.state.inference_lock = asyncio.Lock()
+    app.state.decision_lock = asyncio.Lock()
+    app.state.decision_runner = None
     app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_methods=['GET', 'POST', 'DELETE'], allow_headers=['Content-Type', 'X-Care-Client', 'X-Session-Id', 'X-Frame-Id'], max_age=600)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost', 'testserver'])
 
@@ -62,7 +75,34 @@ def create_app(detector_factory=None):
     @app.get('/health')
     def health():
         detector = app.state.detector
-        return {'status': 'ready', 'model': detector.model_name, 'device': detector.device, 'schema_version': 1}
+        return {'status': 'ready', 'model': detector.model_name, 'device': detector.device, 'decision_loaded': app.state.decision_runner is not None, 'schema_version': 1}
+
+    @app.get('/decision/status')
+    def text_decision_status():
+        if app.state.decision_runner is not None:
+            runner = app.state.decision_runner
+            return {'available': True, 'loaded': True, 'run_name': runner.run_name, 'model': runner.model_name, 'device': str(runner.device)}
+        if decision_factory is not None:
+            return {'available': True, 'loaded': False, 'run_name': 'test-double'}
+        from decision_service import decision_status
+        return {**decision_status(), 'loaded': False}
+
+    @app.post('/decision/predict')
+    async def predict_text_decision(payload: DecisionRequest):
+        # A single local worker protects MPS/CPU memory. Requests wait in order
+        # instead of failing when an automatic event overlaps a manual demo.
+        async with app.state.decision_lock:
+            try:
+                if app.state.decision_runner is None:
+                    app.state.decision_runner = await run_in_threadpool(app.state.decision_factory)
+                return await run_in_threadpool(app.state.decision_runner.predict, payload.text)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            except Exception as exc:
+                from decision_service import DecisionModelUnavailable
+                if isinstance(exc, DecisionModelUnavailable):
+                    raise HTTPException(503, str(exc)) from exc
+                raise HTTPException(503, '文字决策模型加载或推理失败，请查看本地服务终端。') from exc
 
     @app.post('/sessions')
     def start_session():

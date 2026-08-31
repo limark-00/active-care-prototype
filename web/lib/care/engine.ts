@@ -1,14 +1,25 @@
 import type {
+  AIDecisionPayload,
   CareAction,
   CareEvent,
   CareState,
   EnvironmentInput,
   EventKind,
+  FeedbackOutcome,
+  FeedbackSource,
   Intervention,
+  PatientFeedback,
   Signal,
   Snapshot,
   VisionEvidence,
 } from './types.ts';
+import {
+  createEventContext,
+  decisionRequestKey,
+  evidenceFromManualText,
+  manualTitle,
+  sceneFromText,
+} from './ai.ts';
 import { ZONE_POLICY } from '../zones.ts';
 import {
   deriveOverview,
@@ -26,9 +37,14 @@ import {
 export const POLICY = {
   confirmMs: 5000,
   responseMs: 20000,
+  visualResponseMs: 15000,
+  followupMs: 10000,
   recoveryMs: 5000,
   staleMs: 3500,
 } as const;
+export function responseWindowMs(profile: CareEvent['profile']): number {
+  return profile === 'visual' ? POLICY.visualResponseMs : POLICY.responseMs;
+}
 export const INITIAL_INPUT: EnvironmentInput = {
   temperature: 24,
   humidity: 50,
@@ -45,6 +61,7 @@ export const TITLES: Record<EventKind, string> = {
   device: '模拟输入不可用',
   zone_dwell: '区域持续停留',
   fall_candidate: '疑似跌倒 · 待人工核查',
+  manual_text: '人工文字事件',
 };
 export const PHASE_LABELS = {
   CONFIRMING: '观察确认中',
@@ -61,6 +78,25 @@ export const INTERVENTION_LABELS: Record<Intervention, string> = {
   I3: '保护请求（未接入）',
   I4: '网页求助',
 };
+export const PROFILE_LABELS: Record<CareEvent['profile'], string> = {
+  voice: '可理解简短提醒，可主动求助',
+  visual: '需要分步图示，求助能力待确认',
+};
+export const FEEDBACK_LABELS: Record<PatientFeedback, string> = {
+  responded: '已回应，正在处理',
+  improved: '已按提醒行动',
+  no_response: '响应窗口内无回应',
+  risk_persisted: '复核后风险仍在',
+  declined: '拒绝本次提醒',
+  help: '主动请求帮助',
+};
+export const FEEDBACK_OUTCOME_LABELS: Record<FeedbackOutcome, string> = {
+  pending_verification: '等待现场证据验证',
+  verified_recovery: '后续证据已恢复',
+  risk_persisted: '后续证据仍异常',
+  intervention_escalated: '已增加支持',
+  recorded: '已记录，不自动改变风险',
+};
 const KINDS: EventKind[] = [
   'temperature',
   'humidity',
@@ -69,6 +105,43 @@ const KINDS: EventKind[] = [
   'device',
 ];
 const urgent = (kind: EventKind) => kind === 'smoke' || kind === 'gas';
+const RISK_ORDER = ['L0', 'L1', 'L2', 'L3', 'L4'] as const;
+const INTERVENTION_ORDER: Intervention[] = ['I0', 'I1', 'I2', 'I3', 'I4'];
+const maxRisk = (
+  current: CareEvent['risk'],
+  proposed: AIDecisionPayload['risk'],
+) =>
+  proposed === 'L0' ||
+  RISK_ORDER.indexOf(proposed) <= RISK_ORDER.indexOf(current)
+    ? current
+    : proposed;
+const maxIntervention = (current: Intervention, proposed: Intervention) =>
+  INTERVENTION_ORDER.indexOf(proposed) <= INTERVENTION_ORDER.indexOf(current)
+    ? current
+    : proposed;
+
+function guardedDecision(decision: AIDecisionPayload): AIDecisionPayload {
+  const normalized = {
+    ...decision,
+    reviewReasons: [...decision.reviewReasons],
+  };
+  if (normalized.risk === 'L4' && normalized.intervention !== 'I4') {
+    normalized.intervention = 'I4';
+    normalized.alertMode = 'URGENT_HELP';
+    normalized.manualReview = true;
+    normalized.reviewReasons.push('网页融合校验：L4至少采用I4与紧急网页求助');
+  }
+  if (
+    normalized.intervention === 'I4' &&
+    normalized.alertMode !== 'URGENT_HELP'
+  ) {
+    normalized.alertMode = 'URGENT_HELP';
+    normalized.manualReview = true;
+    normalized.reviewReasons.push('网页融合校验：I4必须对应紧急网页求助');
+  }
+  normalized.reviewReasons = [...new Set(normalized.reviewReasons)].slice(0, 8);
+  return normalized;
+}
 
 export function initialState(): CareState {
   return {
@@ -80,6 +153,7 @@ export function initialState(): CareState {
     actions: [],
     overview: { ...INITIAL_OVERVIEW },
     transitions: [],
+    scene: '客厅',
     profile: 'voice',
     events: [],
     logs: [],
@@ -193,6 +267,198 @@ function changeIntervention(
     `${value} ${INTERVENTION_LABELS[value]}：${reason}（仅网页呈现）`,
   );
 }
+
+function emptyFeedbackState() {
+  return {
+    feedback: 'none' as const,
+    feedbackAt: null,
+    feedbackRequestKey: null,
+    feedbackHistory: [],
+  };
+}
+
+function nextSupport(e: CareEvent): Intervention {
+  if (e.intervention === 'I0') return e.profile === 'visual' ? 'I2' : 'I1';
+  if (e.intervention === 'I1') return 'I2';
+  if (e.intervention === 'I2' || e.intervention === 'I3') return 'I4';
+  return 'I4';
+}
+
+function feedbackResponse(
+  feedback: PatientFeedback,
+): CareEvent['context']['response'] {
+  if (feedback === 'help') return 'requested_help';
+  return feedback;
+}
+
+function archiveDecisionForRevision(e: CareEvent, now: number) {
+  e.context.revision += 1;
+  if (!e.aiDecision || e.source === 'manual') return;
+  if (e.aiDecision.status === 'running') return;
+  e.aiDecisionHistory = [
+    { ...e.aiDecision },
+    ...(e.aiDecisionHistory ?? []),
+  ].slice(0, 12);
+  e.aiDecision = null;
+  e.updatedAt = now;
+}
+
+function feedbackForCurrentOutput(s: CareState, e: CareEvent): boolean {
+  const output = currentOutput(s, e);
+  return !!output && e.feedbackRequestKey === output.requestKey;
+}
+
+function recordFeedback(
+  s: CareState,
+  e: CareEvent,
+  feedback: PatientFeedback,
+  source: FeedbackSource,
+  now: number,
+): boolean {
+  const output = currentOutput(s, e);
+  const requestKey = output?.requestKey ?? outputKey(e);
+  const latest = (e.feedbackHistory ?? []).find(
+    (record) => record.requestKey === requestKey,
+  );
+  const isFollowup =
+    feedback === 'risk_persisted' && latest?.outcome === 'pending_verification';
+  const isHelpFollowup = feedback === 'help' && latest?.feedback !== 'help';
+  if (latest && !isFollowup && !isHelpFollowup) {
+    if (source === 'caregiver_report')
+      s.notice = '本轮已经记录反馈，请等待新的干预轮次。';
+    return false;
+  }
+  if (
+    source === 'caregiver_report' &&
+    feedback !== 'help' &&
+    (!output || output.status !== 'executed')
+  ) {
+    s.notice = '当前提示尚未在网页呈现，不能记录患者对本轮提示的回应。';
+    return false;
+  }
+
+  const before = e.intervention;
+  const next =
+    feedback === 'help'
+      ? 'I4'
+      : feedback === 'no_response' || feedback === 'risk_persisted'
+        ? nextSupport(e)
+        : before;
+  if (isFollowup && latest) {
+    latest.outcome = 'risk_persisted';
+    latest.interventionAfter = next;
+  }
+  e.feedback = feedback;
+  e.feedbackAt = now;
+  e.feedbackRequestKey = requestKey;
+  e.context.response = feedbackResponse(feedback);
+  e.context.previousIntervention = before;
+  e.context.previousOutcome =
+    feedback === 'improved'
+      ? 'effective_reported'
+      : feedback === 'responded'
+        ? 'pending'
+        : feedback === 'no_response' || feedback === 'risk_persisted'
+          ? 'ineffective'
+          : feedback === 'declined'
+            ? 'declined'
+            : 'help_requested';
+  if (e.source !== 'manual') e.context.evidence = e.evidence;
+  if (next !== before)
+    changeIntervention(
+      s,
+      e,
+      next,
+      now,
+      feedback === 'help'
+        ? '收到主动求助请求。'
+        : '本轮没有产生可验证效果，按最低必要干预增加支持；风险等级保持不变。',
+    );
+
+  const outcome: FeedbackOutcome =
+    feedback === 'responded' || feedback === 'improved'
+      ? 'pending_verification'
+      : next !== before
+        ? 'intervention_escalated'
+        : 'recorded';
+  s.sequence += 1;
+  e.feedbackHistory = [
+    {
+      id: `FDB-${s.sequence}`,
+      eventId: e.id,
+      requestKey,
+      at: now,
+      source,
+      feedback,
+      signal: e.signal,
+      interventionBefore: before,
+      interventionAfter: next,
+      outcome,
+      reason:
+        source === 'system_timeout'
+          ? feedback === 'risk_persisted'
+            ? `记录回应后继续复核 ${POLICY.followupMs / 1000} 秒，现场证据仍异常。`
+            : `网页提示呈现后 ${responseWindowMs(e.profile) / 1000} 秒内未记录回应，且当前证据仍异常。`
+          : feedback === 'help'
+            ? '演示者记录了患者主动求助。'
+            : '由演示者代填患者反馈，仍需摄像头或环境证据验证结果。',
+    },
+    ...(e.feedbackHistory ?? []),
+  ].slice(0, 30);
+  log(
+    s,
+    now,
+    e.id,
+    `${source === 'system_timeout' ? '系统计时' : '人工代填'}反馈：${FEEDBACK_LABELS[feedback]}；${before === next ? `保持 ${next}` : `${before} → ${next}`}，风险保持 ${e.risk}。`,
+  );
+  archiveDecisionForRevision(e, now);
+  return true;
+}
+
+function verifyFeedbackRecovery(s: CareState, e: CareEvent, now: number) {
+  const pending = (e.feedbackHistory ?? []).find(
+    (record) => record.outcome === 'pending_verification',
+  );
+  if (!pending) return;
+  pending.outcome = 'verified_recovery';
+  pending.interventionAfter = e.intervention;
+  log(
+    s,
+    now,
+    e.id,
+    '后续有效证据已恢复；本轮反馈标记为已验证，事件仍需完成稳定观察。',
+  );
+}
+
+function evaluateResponseLoop(s: CareState, e: CareEvent, now: number) {
+  if (e.signal === 'normal') {
+    verifyFeedbackRecovery(s, e, now);
+    return;
+  }
+  if (
+    e.signal !== 'abnormal' ||
+    e.intervention === 'I0' ||
+    e.intervention === 'I4' ||
+    e.acknowledgedAt !== null
+  )
+    return;
+  const startedAt = responseWindowStarted(s, e);
+  if (startedAt === null) return;
+  const output = currentOutput(s, e);
+  if (!output) return;
+  if (!feedbackForCurrentOutput(s, e)) {
+    if (now - startedAt >= responseWindowMs(e.profile))
+      recordFeedback(s, e, 'no_response', 'system_timeout', now);
+    return;
+  }
+  const pending = (e.feedbackHistory ?? []).find(
+    (record) =>
+      record.requestKey === output.requestKey &&
+      record.outcome === 'pending_verification',
+  );
+  if (pending && now - pending.at >= POLICY.followupMs)
+    recordFeedback(s, e, 'risk_persisted', 'system_timeout', now);
+}
 function evaluateEnvironment(s: CareState, now: number) {
   if (!s.snapshot) return;
   for (const kind of KINDS) {
@@ -202,16 +468,38 @@ function evaluateEnvironment(s: CareState, now: number) {
     const result = signalFor(kind, s.snapshot, now, !!e);
     if (!e && result.signal === 'abnormal') {
       s.sequence += 1;
+      const id = `EV-${String(s.sequence).padStart(4, '0')}`;
+      const risk = urgent(kind) ? 'L4' : 'L1';
+      const intervention = urgent(kind) ? 'I4' : 'I0';
       e = {
-        id: `EV-${String(s.sequence).padStart(4, '0')}`,
+        id,
         kind,
         title: TITLES[kind],
-        risk: urgent(kind) ? 'L4' : 'L1',
-        intervention: urgent(kind) ? 'I4' : 'I0',
+        risk,
+        intervention,
         phase: urgent(kind) ? 'ESCALATED' : 'CONFIRMING',
         signal: 'abnormal',
         evidence: result.evidence,
         source: 'simulated',
+        context: createEventContext({
+          eventId: id,
+          scene: s.scene,
+          source: 'simulated',
+          kind,
+          title: TITLES[kind],
+          evidence: result.evidence,
+          observedAt: now,
+          profile: s.profile,
+        }),
+        ruleDecision: {
+          risk,
+          intervention,
+          reason: urgent(kind)
+            ? '独立烟雾/燃气报警硬规则直接求助。'
+            : '异常刚出现，先连续确认。',
+        },
+        aiDecision: null,
+        aiDecisionHistory: [],
         profile: s.profile,
         createdAt: now,
         abnormalSince: now,
@@ -219,7 +507,7 @@ function evaluateEnvironment(s: CareState, now: number) {
         interventionAt: urgent(kind) ? now : null,
         normalSince: null,
         acknowledgedAt: null,
-        feedback: 'none',
+        ...emptyFeedbackState(),
         closedAt: null,
         falseAlarmNote: null,
       };
@@ -252,6 +540,7 @@ function evaluateEnvironment(s: CareState, now: number) {
         e.phase = 'RECOVERING';
         log(s, now, e.id, '输入恢复，开始稳定观察；尚未关闭事件。');
       }
+      evaluateResponseLoop(s, e, now);
       continue;
     }
     if (previousSignal !== 'abnormal') {
@@ -268,36 +557,31 @@ function evaluateEnvironment(s: CareState, now: number) {
     }
     if (urgent(kind)) continue;
     if (
-      e.intervention === 'I0' &&
+      e.ruleDecision?.intervention === 'I0' &&
       e.abnormalSince !== null &&
       now - e.abnormalSince >= POLICY.confirmMs
     ) {
-      e.risk = kind === 'device' ? 'L1' : 'L2';
-      changeIntervention(
-        s,
-        e,
-        e.profile === 'visual' ? 'I2' : 'I1',
-        now,
+      const ruleRisk = kind === 'device' ? 'L1' : 'L2';
+      const ruleIntervention = e.profile === 'visual' ? 'I2' : 'I1';
+      const reason =
         e.profile === 'visual'
           ? '档案预设需要图示支持。'
-          : '持续异常，先给出简短提醒。',
-      );
-    } else if (
-      e.interventionAt !== null &&
-      e.acknowledgedAt === null &&
-      e.feedback === 'none' &&
-      responseWindowStarted(s, e) !== null &&
-      now - responseWindowStarted(s, e)! >= POLICY.responseMs &&
-      e.intervention !== 'I4'
-    ) {
+          : '持续异常，先给出简短提醒。';
+      e.ruleDecision = {
+        risk: ruleRisk,
+        intervention: ruleIntervention,
+        reason,
+      };
+      e.risk = maxRisk(e.risk, ruleRisk);
       changeIntervention(
         s,
         e,
-        e.intervention === 'I1' ? 'I2' : 'I4',
+        maxIntervention(e.intervention, ruleIntervention),
         now,
-        '未收到人工反馈，增加支持；风险等级不因未回应而提高。',
+        reason,
       );
     }
+    evaluateResponseLoop(s, e, now);
   }
 }
 
@@ -322,8 +606,9 @@ function evaluateCamera(s: CareState, now: number) {
     )
       continue;
     const intervention = s.profile === 'visual' ? 'I2' : 'I1';
+    const id = `EV-${String(++s.sequence).padStart(4, '0')}`;
     const e: CareEvent = {
-      id: `EV-${String(++s.sequence).padStart(4, '0')}`,
+      id,
       kind: 'zone_dwell',
       title: o.title,
       risk: 'L2',
@@ -332,6 +617,23 @@ function evaluateCamera(s: CareState, now: number) {
       signal: 'abnormal',
       evidence: o.evidence,
       source: 'camera',
+      context: createEventContext({
+        eventId: id,
+        scene: s.scene,
+        source: 'camera',
+        kind: 'zone_dwell',
+        title: o.title,
+        evidence: o.evidence,
+        observedAt: o.capturedAt,
+        profile: s.profile,
+      }),
+      ruleDecision: {
+        risk: 'L2',
+        intervention,
+        reason: '同一观察对象达到区域停留阈值。',
+      },
+      aiDecision: null,
+      aiDecisionHistory: [],
       cameraKey: o.key,
       target: o.target,
       profile: s.profile,
@@ -341,7 +643,7 @@ function evaluateCamera(s: CareState, now: number) {
       interventionAt: now,
       normalSince: null,
       acknowledgedAt: null,
-      feedback: 'none',
+      ...emptyFeedbackState(),
       closedAt: null,
       falseAlarmNote: null,
     };
@@ -385,6 +687,7 @@ function evaluateCamera(s: CareState, now: number) {
         e.phase = 'RECOVERING';
         log(s, now, e.id, '同一观察对象已确认在区域外，开始恢复观察。');
       }
+      evaluateResponseLoop(s, e, now);
       continue;
     }
     if (old !== 'abnormal') {
@@ -399,21 +702,7 @@ function evaluateCamera(s: CareState, now: number) {
         '重新观测到原对象仍在原区域内：保留原事件，重新等待反馈。',
       );
     }
-    if (
-      e.intervention !== 'I4' &&
-      e.interventionAt !== null &&
-      e.acknowledgedAt === null &&
-      e.feedback === 'none' &&
-      responseWindowStarted(s, e) !== null &&
-      now - responseWindowStarted(s, e)! >= POLICY.responseMs
-    )
-      changeIntervention(
-        s,
-        e,
-        e.intervention === 'I1' ? 'I2' : 'I4',
-        now,
-        '区域停留仍有视觉证据，未收到人工反馈；增加支持，不提高风险等级。',
-      );
+    evaluateResponseLoop(s, e, now);
   }
 }
 function evaluate(s: CareState, now: number) {
@@ -490,16 +779,35 @@ function acceptVision(s: CareState, v: VisionEvidence | null, now: number) {
     )
       continue;
     const delayed = now - v.capturedAt > POLICY.staleMs;
+    const id = `EV-${String(++s.sequence).padStart(4, '0')}`;
+    const evidence = `${delayed ? '延迟返回的历史候选；当前观测未知。' : ''}采集时间 ${v.capturedAt}：${p.fallEvidence}。仅为规则候选，不能判断意识或伤情。`;
     const e: CareEvent = {
-      id: `EV-${String(++s.sequence).padStart(4, '0')}`,
+      id,
       kind: 'fall_candidate',
       title: TITLES.fall_candidate,
       risk: 'L3',
       intervention: 'I4',
       phase: 'ESCALATED',
       signal: delayed ? 'unknown' : 'abnormal',
-      evidence: `${delayed ? '延迟返回的历史候选；当前观测未知。' : ''}采集时间 ${v.capturedAt}：${p.fallEvidence}。仅为规则候选，不能判断意识或伤情。`,
+      evidence,
       source: 'camera',
+      context: createEventContext({
+        eventId: id,
+        scene: s.scene,
+        source: 'camera',
+        kind: 'fall_candidate',
+        title: TITLES.fall_candidate,
+        evidence,
+        observedAt: v.capturedAt,
+        profile: s.profile,
+      }),
+      ruleDecision: {
+        risk: 'L3',
+        intervention: 'I4',
+        reason: '疑似跌倒规则候选直接进入人工核查队列。',
+      },
+      aiDecision: null,
+      aiDecisionHistory: [],
       cameraKey: key,
       target: `${v.sessionId} / P${p.id}（非身份识别）`,
       profile: s.profile,
@@ -509,7 +817,7 @@ function acceptVision(s: CareState, v: VisionEvidence | null, now: number) {
       interventionAt: now,
       normalSince: null,
       acknowledgedAt: null,
-      feedback: 'none',
+      ...emptyFeedbackState(),
       closedAt: null,
       falseAlarmNote: null,
     };
@@ -524,7 +832,7 @@ function acceptVision(s: CareState, v: VisionEvidence | null, now: number) {
 }
 
 export function canClose(e: CareEvent, s: CareState, now: number): boolean {
-  if (e.kind === 'fall_candidate') return false;
+  if (e.kind === 'fall_candidate' || e.source === 'manual') return false;
   const camera = (s.camera ?? []).find((o) => o.key === e.cameraKey);
   const available =
     e.source === 'camera'
@@ -557,7 +865,34 @@ function reduceCare(previous: CareState, action: CareAction): CareState {
     return previous;
   const s: CareState = {
     ...previous,
-    events: previous.events.map((e) => ({ ...e })),
+    events: previous.events.map((e) => ({
+      ...e,
+      context: { ...e.context },
+      ruleDecision: e.ruleDecision ? { ...e.ruleDecision } : null,
+      aiDecision: e.aiDecision
+        ? {
+            ...e.aiDecision,
+            decision: e.aiDecision.decision
+              ? {
+                  ...e.aiDecision.decision,
+                  reviewReasons: [...e.aiDecision.decision.reviewReasons],
+                }
+              : null,
+          }
+        : null,
+      aiDecisionHistory: (e.aiDecisionHistory ?? []).map((record) => ({
+        ...record,
+        decision: record.decision
+          ? {
+              ...record.decision,
+              reviewReasons: [...record.decision.reviewReasons],
+            }
+          : null,
+      })),
+      feedbackHistory: (e.feedbackHistory ?? []).map((record) => ({
+        ...record,
+      })),
+    })),
     logs: [...previous.logs],
     camera: [...(previous.camera ?? [])],
     actions: (previous.actions ?? []).map((a) => ({ ...a })),
@@ -566,6 +901,7 @@ function reduceCare(previous: CareState, action: CareAction): CareState {
     visionCursor: previous.visionCursor ?? null,
     overview: previous.overview ?? { ...INITIAL_OVERVIEW },
     transitions: [...(previous.transitions ?? [])],
+    scene: previous.scene ?? '客厅',
     lastNow: action.now,
     notice: '',
   };
@@ -601,8 +937,257 @@ function reduceCare(previous: CareState, action: CareAction): CareState {
     );
     return s;
   }
+  if (action.type === 'scene') {
+    if (s.scene === action.scene) return s;
+    s.scene = action.scene;
+    log(
+      s,
+      action.now,
+      null,
+      `当前监测场景切换为${action.scene}；只影响之后创建的统一事件。`,
+    );
+    return s;
+  }
+  if (action.type === 'manual-ai-event') {
+    const decision = guardedDecision(action.decision);
+    if (decision.risk === 'L0' && decision.intervention === 'I0') {
+      log(
+        s,
+        action.now,
+        null,
+        '人工文字经AI判断为 L0 / I0，仅保留本次页面结果，不创建待处理事件。',
+      );
+      return s;
+    }
+    const id = `EV-${String(++s.sequence).padStart(4, '0')}`;
+    const risk = decision.risk === 'L0' ? 'L1' : decision.risk;
+    if (decision.risk === 'L0') {
+      decision.manualReview = true;
+      decision.reviewReasons = [
+        ...decision.reviewReasons,
+        '风险与干预输出不一致，活动事件按最低L1呈现',
+      ];
+    }
+    const context = createEventContext({
+      eventId: id,
+      scene: sceneFromText(action.text),
+      source: 'manual',
+      kind: 'manual_text',
+      title: manualTitle(action.text),
+      evidence: evidenceFromManualText(action.text),
+      observedAt: action.now,
+      profile: s.profile,
+    });
+    const intervention = decision.intervention;
+    const event: CareEvent = {
+      id,
+      kind: 'manual_text',
+      title: context.title,
+      risk,
+      intervention,
+      phase:
+        intervention === 'I4'
+          ? 'ESCALATED'
+          : intervention === 'I0'
+            ? 'CONFIRMING'
+            : 'INTERVENING',
+      signal: 'unknown',
+      evidence: context.evidence,
+      source: 'manual',
+      context,
+      ruleDecision: null,
+      aiDecision: {
+        status: 'completed',
+        requestKey: `manual:${id}`,
+        requestedAt: action.now,
+        completedAt: action.now,
+        decision,
+        applied: true,
+        finalRisk: risk,
+        finalIntervention: intervention,
+        error: null,
+      },
+      aiDecisionHistory: [],
+      profile: s.profile,
+      createdAt: action.now,
+      abnormalSince: null,
+      updatedAt: action.now,
+      interventionAt: intervention === 'I0' ? null : action.now,
+      normalSince: null,
+      acknowledgedAt: null,
+      ...emptyFeedbackState(),
+      closedAt: null,
+      falseAlarmNote: null,
+    };
+    s.events = [event, ...s.events];
+    log(
+      s,
+      action.now,
+      id,
+      `人工文字 → AI ${decision.risk} / ${decision.intervention} / ${decision.alertMode}；已进入事件中心，须人工核查结束。`,
+    );
+    return s;
+  }
   // Re-evaluate freshness before accepting user mutations.
   evaluate(s, action.now);
+  if (action.type === 'ai-start') {
+    const event = s.events.find(
+      (item) => item.id === action.id && item.phase !== 'CLOSED',
+    );
+    if (
+      !event ||
+      event.aiDecision !== null ||
+      action.requestKey !== decisionRequestKey(event)
+    )
+      return s;
+    event.aiDecision = {
+      status: 'running',
+      requestKey: action.requestKey,
+      requestedAt: action.now,
+      completedAt: null,
+      decision: null,
+      applied: false,
+      finalRisk: null,
+      finalIntervention: null,
+      error: null,
+    };
+    event.updatedAt = action.now;
+    log(s, action.now, event.id, '统一事件已进入本机AI串行判断队列。');
+    return s;
+  }
+  if (action.type === 'ai-result') {
+    const event = s.events.find(
+      (item) => item.id === action.id && item.phase !== 'CLOSED',
+    );
+    if (
+      !event ||
+      event.aiDecision?.status !== 'running' ||
+      event.aiDecision.requestKey !== action.requestKey
+    )
+      return s;
+    const decision = guardedDecision(action.decision);
+    if (action.requestKey !== decisionRequestKey(event)) {
+      event.aiDecisionHistory = [
+        {
+          status: 'completed' as const,
+          requestKey: action.requestKey,
+          requestedAt: event.aiDecision.requestedAt,
+          completedAt: action.now,
+          decision,
+          applied: false,
+          finalRisk: event.risk,
+          finalIntervention: event.intervention,
+          error: '事件反馈已更新，本次旧上下文结果仅存档，未参与融合。',
+        },
+        ...(event.aiDecisionHistory ?? []),
+      ].slice(0, 12);
+      event.aiDecision = null;
+      event.updatedAt = action.now;
+      log(
+        s,
+        action.now,
+        event.id,
+        'AI返回时事件反馈已经更新；旧结果未融合，已按新上下文重新排队。',
+      );
+      return s;
+    }
+    const mayFuse =
+      !decision.abstain &&
+      event.signal !== 'normal' &&
+      event.phase !== 'RECOVERING';
+    if (mayFuse) {
+      event.risk = maxRisk(event.risk, decision.risk);
+      let nextIntervention = maxIntervention(
+        event.intervention,
+        decision.intervention,
+      );
+      if (event.profile === 'visual' && nextIntervention === 'I1')
+        nextIntervention = 'I2';
+      changeIntervention(
+        s,
+        event,
+        nextIntervention,
+        action.now,
+        'AI建议通过一致性检查；规则与患者能力预设作为安全下限，不允许自动降级。',
+      );
+    }
+    event.aiDecision = {
+      status: 'completed',
+      requestKey: action.requestKey,
+      requestedAt: event.aiDecision.requestedAt,
+      completedAt: action.now,
+      decision,
+      applied: mayFuse,
+      finalRisk: event.risk,
+      finalIntervention: event.intervention,
+      error: null,
+    };
+    event.updatedAt = action.now;
+    log(
+      s,
+      action.now,
+      event.id,
+      mayFuse
+        ? `AI建议 ${decision.risk} / ${decision.intervention} / ${decision.alertMode}；安全融合后为 ${event.risk} / ${event.intervention}。`
+        : `AI建议 ${decision.risk} / ${decision.intervention}；因拒绝自动判断或事件已恢复，仅记录建议，规则状态不变。`,
+    );
+    return s;
+  }
+  if (action.type === 'ai-failed') {
+    const event = s.events.find(
+      (item) => item.id === action.id && item.phase !== 'CLOSED',
+    );
+    if (
+      !event ||
+      event.aiDecision?.status !== 'running' ||
+      event.aiDecision.requestKey !== action.requestKey
+    )
+      return s;
+    const failed = {
+      ...event.aiDecision,
+      status: 'failed',
+      completedAt: action.now,
+      error: action.error.trim().slice(0, 240) || '本地AI决策服务暂时不可用。',
+    } as const;
+    if (action.requestKey !== decisionRequestKey(event)) {
+      event.aiDecisionHistory = [
+        failed,
+        ...(event.aiDecisionHistory ?? []),
+      ].slice(0, 12);
+      event.aiDecision = null;
+      event.updatedAt = action.now;
+      log(
+        s,
+        action.now,
+        event.id,
+        '旧上下文AI请求失败；新反馈上下文继续重新排队。',
+      );
+      return s;
+    }
+    event.aiDecision = failed;
+    event.updatedAt = action.now;
+    log(
+      s,
+      action.now,
+      event.id,
+      'AI判断失败；事件继续使用可审计规则，摄像头与报警流程没有中断。',
+    );
+    return s;
+  }
+  if (action.type === 'ai-retry') {
+    const event = s.events.find(
+      (item) => item.id === action.id && item.phase !== 'CLOSED',
+    );
+    if (!event || event.aiDecision?.status !== 'failed') return s;
+    event.aiDecisionHistory = [
+      { ...event.aiDecision },
+      ...(event.aiDecisionHistory ?? []),
+    ].slice(0, 12);
+    event.aiDecision = null;
+    event.updatedAt = action.now;
+    log(s, action.now, event.id, '已重新加入本机AI判断队列。');
+    return s;
+  }
   if (action.type === 'output-result') {
     const record = s.actions.find(
       (a) =>
@@ -667,15 +1252,16 @@ function reduceCare(previous: CareState, action: CareAction): CareState {
     e.acknowledgedAt = action.now;
     log(s, action.now, e.id, '演示者/照护者确认接手；不代表风险解除。');
   } else if (action.type === 'feedback') {
-    e.feedback = action.feedback;
-    log(
-      s,
-      action.now,
-      e.id,
-      `人工代填反馈：${{ responded: '已回应（不代表安全）', declined: '拒绝提醒（不等于无自主能力）', help: '请求帮助' }[action.feedback]}。`,
-    );
-    if (action.feedback === 'help')
-      changeIntervention(s, e, 'I4', action.now, '收到人工求助请求。');
+    if (
+      action.feedback !== 'help' &&
+      action.requestKey !== undefined &&
+      action.requestKey !== outputKey(e)
+    ) {
+      s.notice = '该反馈属于已经结束的干预轮次，未写入当前事件。';
+      e.updatedAt = action.now;
+      return s;
+    }
+    recordFeedback(s, e, action.feedback, 'caregiver_report', action.now);
   } else if (action.type === 'false-alarm') {
     const note = action.note.trim().slice(0, 200);
     if (!note) {
@@ -699,13 +1285,13 @@ function reduceCare(previous: CareState, action: CareAction): CareState {
     log(s, action.now, e.id, '输入已稳定恢复，人工结束本次事件。');
   } else if (action.type === 'review-close') {
     const note = action.note.trim().slice(0, 200);
-    if (
-      e.source !== 'camera' ||
-      (e.signal !== 'unknown' && e.kind !== 'fall_candidate') ||
-      !note
-    ) {
+    const reviewable =
+      e.source === 'manual' ||
+      (e.source === 'camera' &&
+        (e.signal === 'unknown' || e.kind === 'fall_candidate'));
+    if (!reviewable || !note) {
       s.notice =
-        '仅疑似跌倒或观测未知的视觉事件可人工核查结束，且必须填写实际核查说明。';
+        '仅人工文字、疑似跌倒或观测未知的视觉事件可人工核查结束，且必须填写实际核查说明。';
       return s;
     }
     e.phase = 'CLOSED';

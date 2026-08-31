@@ -40,20 +40,20 @@ export default function FrameworkPanel({ state }: { state: CareState }) {
     },
     {
       name: '04 · 风险与决策',
-      status: '规则引擎已接入',
-      text: '按证据选择 L 风险；再结合支持预设、反馈与执行结果选择 I 干预。',
-      href: '#events',
+      status: '规则 + V3.1 模型',
+      text: '摄像头与环境事件自动转为统一文字；V3.1建议进入事件中心，规则作为不可降低的安全下限。',
+      href: '#ai-decision',
     },
     {
       name: '05 · 网页求助',
       status: `${pending} 条待接手`,
-      text: `${requests.length - pending} 条已接手但未结束。接手、反馈、误报、结束分别记录。`,
+      text: `${requests.length - pending} 条已接手但未结束。每轮呈现、患者反馈、超时升级与恢复验证分别记录。`,
       href: '#events',
     },
     {
       name: '06 · 扩展与记录',
       status: '接口有边界',
-      text: 'I3 返回模拟，手机返回未接通。状态、事件、回执可导出 JSON。',
+      text: '反馈更新后重新运行 V3.1 辅助判断；确定性状态机与规则安全下限始终保留。',
       href: '#log',
     },
   ];
@@ -64,7 +64,7 @@ export default function FrameworkPanel({ state }: { state: CareState }) {
           <h2>伴护状态与系统框架</h2>
           <p>AI 感知 → 证据规则 → 个体支持 → 执行回执 → 反馈与恢复</p>
         </div>
-        <Badge variant="outline">框架 v0.4</Badge>
+        <Badge variant="outline">框架 v0.6</Badge>
       </div>
       <div
         className={`overview-state ${overview.code === 'EMERGENCY' || overview.code === 'HIGH_RISK' ? 'overview-attention' : ''}`}

@@ -1,0 +1,43 @@
+{
+  "dataset": "active-care-synthetic-text-decisions",
+  "version": 1,
+  "seed": 20260829,
+  "policy_version": "synthetic-care-policy-v1",
+  "synthetic": true,
+  "scene_count": 6,
+  "event_definition_count": 108,
+  "case_group_count": 1200,
+  "sample_count": 3600,
+  "samples_per_split": {
+    "train": 2520,
+    "validation": 540,
+    "test": 540
+  },
+  "samples_per_scene": {
+    "balcony": 600,
+    "bathroom": 600,
+    "bedroom": 600,
+    "entrance": 600,
+    "kitchen": 600,
+    "living_room": 600
+  },
+  "samples_per_intervention": {
+    "I0": 720,
+    "I1": 720,
+    "I2": 720,
+    "I3": 720,
+    "I4": 720
+  },
+  "samples_per_risk": {
+    "L0": 438,
+    "L1": 519,
+    "L2": 882,
+    "L3": 1260,
+    "L4": 501
+  },
+  "alarm_counts": {
+    "false": 2880,
+    "true": 720
+  },
+  "warning": "全部样本由原型策略合成，只适合软件与模型流程实验，不代表真实照护、医学或消防决策标准。"
+}

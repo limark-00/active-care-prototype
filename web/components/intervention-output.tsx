@@ -49,7 +49,11 @@ export default function InterventionOutput({
           <div className="output-heading">
             <strong>
               {event.intervention} ·{' '}
-              {event.intervention === 'I4' ? '网页照护者请求' : '当前提示'}
+              {event.intervention === 'I4'
+                ? '网页照护者请求'
+                : event.intervention === 'I3'
+                  ? '保护建议（仅模拟）'
+                  : '当前提示'}
             </strong>
             <span>
               {action ? OUTPUT_LABELS[action.status] : '等待决策记录'}

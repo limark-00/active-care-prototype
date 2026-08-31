@@ -8,9 +8,12 @@ export type EventKind =
   | 'gas'
   | 'device'
   | 'zone_dwell'
-  | 'fall_candidate';
+  | 'fall_candidate'
+  | 'manual_text';
 export type RiskLevel = 'L1' | 'L2' | 'L3' | 'L4';
+export type ModelRiskLevel = 'L0' | RiskLevel;
 export type Intervention = 'I0' | 'I1' | 'I2' | 'I3' | 'I4';
+export type AlertMode = 'NONE' | 'PAGE_WARNING' | 'URGENT_HELP';
 export type Phase =
   | 'CONFIRMING'
   | 'INTERVENING'
@@ -20,6 +23,91 @@ export type Phase =
   | 'CLOSED';
 export type Signal = 'abnormal' | 'normal' | 'unknown';
 export type Profile = 'voice' | 'visual';
+export type PatientFeedback =
+  | 'responded'
+  | 'improved'
+  | 'no_response'
+  | 'risk_persisted'
+  | 'declined'
+  | 'help';
+export type FeedbackSource = 'caregiver_report' | 'system_timeout';
+export type FeedbackOutcome =
+  | 'pending_verification'
+  | 'verified_recovery'
+  | 'risk_persisted'
+  | 'intervention_escalated'
+  | 'recorded';
+export type CareScene =
+  | '厨房'
+  | '卫生间'
+  | '卧室'
+  | '客厅'
+  | '入户门区域'
+  | '阳台';
+export type EventSource = 'simulated' | 'camera' | 'manual';
+
+/** One normalized envelope is used by camera, simulated and manual inputs. */
+export interface UnifiedEventContext {
+  schemaVersion: 2;
+  revision: number;
+  eventId: string;
+  scene: string;
+  source: EventSource;
+  kind: EventKind;
+  title: string;
+  evidence: string;
+  observedAt: number;
+  profile: Profile;
+  response:
+    | 'not_requested'
+    | 'responded'
+    | 'improved'
+    | 'no_response'
+    | 'risk_persisted'
+    | 'declined'
+    | 'requested_help'
+    | 'unknown';
+  previousIntervention: Intervention | 'none';
+  previousOutcome:
+    | 'not_available'
+    | 'pending'
+    | 'effective_reported'
+    | 'ineffective'
+    | 'declined'
+    | 'help_requested';
+  rawText: string | null;
+}
+export interface RuleDecision {
+  risk: RiskLevel;
+  intervention: Intervention;
+  reason: string;
+}
+export interface AIDecisionPayload {
+  model: string;
+  runName: string;
+  device: string;
+  inferenceMs: number;
+  risk: ModelRiskLevel;
+  intervention: Intervention;
+  alertMode: AlertMode;
+  manualReview: boolean;
+  abstain: boolean;
+  riskConfidence: number;
+  interventionConfidence: number;
+  alertConfidence: number;
+  reviewReasons: string[];
+}
+export interface AIDecisionRecord {
+  status: 'running' | 'completed' | 'failed';
+  requestKey: string;
+  requestedAt: number;
+  completedAt: number | null;
+  decision: AIDecisionPayload | null;
+  applied: boolean;
+  finalRisk: RiskLevel | null;
+  finalIntervention: Intervention | null;
+  error: string | null;
+}
 
 /** No image, keypoints, or private backend session token enters the care engine. */
 export interface VisionEvidence {
@@ -47,7 +135,7 @@ export type OverviewCode =
   | 'RECOVERING';
 export interface Overview {
   code: OverviewCode;
-  risk: RiskLevel | 'L0' | 'UNKNOWN';
+  risk: ModelRiskLevel | 'UNKNOWN';
   observation: 'VALID' | 'DEGRADED' | 'UNKNOWN';
   reason: string;
 }
@@ -73,6 +161,19 @@ export interface ActionRecord {
   status: OutputStatus;
   result: string;
 }
+export interface FeedbackRecord {
+  id: string;
+  eventId: string;
+  requestKey: string;
+  at: number;
+  source: FeedbackSource;
+  feedback: PatientFeedback;
+  signal: Signal;
+  interventionBefore: Intervention;
+  interventionAfter: Intervention;
+  outcome: FeedbackOutcome;
+  reason: string;
+}
 
 export interface EnvironmentInput {
   temperature: number;
@@ -95,7 +196,11 @@ export interface CareEvent {
   phase: Phase;
   signal: Signal;
   evidence: string;
-  source: 'simulated' | 'camera';
+  source: EventSource;
+  context: UnifiedEventContext;
+  ruleDecision: RuleDecision | null;
+  aiDecision: AIDecisionRecord | null;
+  aiDecisionHistory: AIDecisionRecord[];
   cameraKey?: string;
   target?: string;
   reviewNote?: string;
@@ -106,7 +211,10 @@ export interface CareEvent {
   interventionAt: number | null;
   normalSince: number | null;
   acknowledgedAt: number | null;
-  feedback: 'none' | 'responded' | 'declined' | 'help';
+  feedback: 'none' | PatientFeedback;
+  feedbackAt: number | null;
+  feedbackRequestKey: string | null;
+  feedbackHistory: FeedbackRecord[];
   closedAt: number | null;
   falseAlarmNote: string | null;
 }
@@ -129,6 +237,7 @@ export interface CareState {
   actions: ActionRecord[];
   overview: Overview;
   transitions: StateTransition[];
+  scene: CareScene;
   profile: Profile;
   events: CareEvent[];
   logs: LogEntry[];
@@ -160,11 +269,35 @@ export type CareAction =
   | { type: 'sample'; input: EnvironmentInput; now: number }
   | { type: 'tick'; now: number }
   | { type: 'profile'; profile: Profile; now: number }
+  | { type: 'scene'; scene: CareScene; now: number }
+  | { type: 'ai-start'; id: string; requestKey: string; now: number }
+  | {
+      type: 'ai-result';
+      id: string;
+      requestKey: string;
+      decision: AIDecisionPayload;
+      now: number;
+    }
+  | {
+      type: 'ai-failed';
+      id: string;
+      requestKey: string;
+      error: string;
+      now: number;
+    }
+  | { type: 'ai-retry'; id: string; now: number }
+  | {
+      type: 'manual-ai-event';
+      text: string;
+      decision: AIDecisionPayload;
+      now: number;
+    }
   | { type: 'acknowledge'; id: string; now: number }
   | {
       type: 'feedback';
       id: string;
-      feedback: 'responded' | 'declined' | 'help';
+      feedback: PatientFeedback;
+      requestKey?: string;
       now: number;
     }
   | { type: 'false-alarm'; id: string; note: string; now: number }

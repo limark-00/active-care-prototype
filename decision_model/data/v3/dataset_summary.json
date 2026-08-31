@@ -1,0 +1,35 @@
+{
+  "dataset": "active-care-synthetic-text-decisions-v3",
+  "version": 3,
+  "seed": 20260831,
+  "policy_version": "synthetic-care-policy-v2",
+  "synthetic": true,
+  "explicit_label_codes_in_input": false,
+  "primary_event_ids_are_disjoint": true,
+  "samples_per_split": {
+    "train": 6000,
+    "validation": 750,
+    "test": 750
+  },
+  "primary_samples_per_intervention": {
+    "I0": 1500,
+    "I1": 1500,
+    "I2": 1500,
+    "I3": 1500,
+    "I4": 1500
+  },
+  "primary_samples_per_case_type": {
+    "conflict_unknown": 1102,
+    "hard": 1167,
+    "regular": 5231
+  },
+  "primary_event_count_per_split": {
+    "train": 92,
+    "validation": 29,
+    "test": 29
+  },
+  "ood_test_sample_count": 600,
+  "natural_test_sample_count": 400,
+  "all_sample_count": 8500,
+  "warning": "V3仍为合成数据，只能评估模型工程与合成策略学习，不能代表真实照护准确率。"
+}

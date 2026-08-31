@@ -58,6 +58,11 @@ export function interventionText(e: CareEvent): string[] {
       '请照护者接手并核查当前事件。',
       '这是网页内待处理请求，未联系外部人员。',
     ];
+  if (e.intervention === 'I3')
+    return [
+      '模型建议进入保护级处置，请照护者立即核查并移除当前危险源。',
+      '本原型没有设备执行器，不会自动关火、断电、锁门或限制人员行动。',
+    ];
   if (e.intervention === 'I2')
     return [
       '先查看本事件的对象、区域或异常输入。',

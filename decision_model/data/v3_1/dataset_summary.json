@@ -1,0 +1,44 @@
+{
+  "dataset": "active-care-synthetic-text-decisions-v3.1",
+  "version": "3.1",
+  "seed": 20260901,
+  "synthetic": true,
+  "explicit_label_codes_in_input": false,
+  "stratified_event_ids_are_disjoint": true,
+  "scene_count": 6,
+  "event_definition_count": 222,
+  "added_event_definition_count": 42,
+  "samples_per_split": {
+    "train": 4800,
+    "validation": 1200,
+    "test": 1200
+  },
+  "primary_samples_per_intervention": {
+    "I0": 1440,
+    "I1": 1440,
+    "I2": 1440,
+    "I3": 1440,
+    "I4": 1440
+  },
+  "primary_samples_per_risk": {
+    "L0": 851,
+    "L1": 1069,
+    "L2": 1981,
+    "L3": 2373,
+    "L4": 926
+  },
+  "primary_samples_per_case_type": {
+    "conflict_unknown": 1080,
+    "hard": 1080,
+    "regular": 5040
+  },
+  "primary_event_count_per_split": {
+    "train": 132,
+    "validation": 30,
+    "test": 30
+  },
+  "ood_test_sample_count": 600,
+  "natural_test_sample_count": 600,
+  "all_sample_count": 8400,
+  "warning": "标签仍来自合成策略，只能用于模型工程实验。"
+}
