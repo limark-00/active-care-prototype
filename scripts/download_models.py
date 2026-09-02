@@ -19,7 +19,7 @@ RELEASE_URL = (
     "https://github.com/limark-00/active-care-prototype/releases/download/"
     "model-v3.1/active-care-v3.1-delta.zip"
 )
-ARCHIVE_SHA256 = "00886a7b47b15d31786bc8d240fc7999bbb48c8d56110e9bf8d1557c14983567"
+ARCHIVE_SHA256 = "f04357af3e131053974ddea4ce6dbc6daba2e25cf01304f8b772f59ef771723f"
 CHECKPOINT_SHA256 = "1bfb03f22cb5eb4840db8c33583391cf8209ecd544cae128de9748fcb8a0645e"
 BASE_MODEL = "hfl/chinese-macbert-base"
 BASE_MODEL_REVISION = "a986e004d2a7f2a1c2f5a3edef4e20604a974ed1"

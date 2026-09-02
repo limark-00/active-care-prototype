@@ -10,7 +10,7 @@ The archive contains the partial-finetuning run directory used by the local text
 
 ```text
 Archive SHA256
-00886a7b47b15d31786bc8d240fc7999bbb48c8d56110e9bf8d1557c14983567
+f04357af3e131053974ddea4ce6dbc6daba2e25cf01304f8b772f59ef771723f
 
 best_delta.pt SHA256
 1bfb03f22cb5eb4840db8c33583391cf8209ecd544cae128de9748fcb8a0645e
