@@ -6,7 +6,7 @@
 
 ## 在这台电脑上使用
 
-依赖与模型已放在项目本地。两个服务运行时，直接打开 **http://localhost:3000**，点击 **“开启摄像头与识别”**，由你允许摄像头权限。若内嵌预览无法授权，可在电脑浏览器中打开同一地址。
+开发机已经安装依赖与模型。**从 GitHub 新克隆的副本不包含模型权重**，须先按下方 macOS 或 Windows 步骤安装依赖并运行模型下载器。两个服务运行时，打开 **http://localhost:3000**，点击 **“开启摄像头与识别”**，由你允许摄像头权限。若内嵌预览无法授权，可在电脑浏览器中打开同一地址。
 
 服务关闭后，可双击 `启动本地伴护.command`，或在项目根目录执行：
 
@@ -132,29 +132,89 @@ cd vision
 
 ## 运行环境 / 安装到另一台电脑
 
-Python 3.12、Node.js 24、pnpm。已验证的依赖版本锁定在 `vision/requirements.txt` 和 `web/pnpm-lock.yaml`；Python 锁文件来自本机 macOS arm64，其他系统可能需要重新解析 `requirements.in` 并验证。
+需要 Python 3.12、Node.js 24 和 pnpm。前端依赖锁定在 `web/pnpm-lock.yaml`。`vision/requirements.txt` 是 macOS arm64 开发机的完整锁定结果；Windows 应从 `vision/requirements.in` 解析适合本机平台的包。
+
+### macOS
+
+在项目根目录执行：
 
 ```sh
 python3.12 -m venv vision/.venv
+vision/.venv/bin/python -m pip install --upgrade pip
 vision/.venv/bin/python -m pip install -r vision/requirements.txt
 vision/.venv/bin/python vision/download_model.py
 cd web
 pnpm install --frozen-lockfile
+cd ..
+bash 下载模型.command
 ```
 
-分开启动（两个终端）：
+之后可双击 `启动本地伴护.command`，或在根目录运行：
 
 ```sh
-cd vision
-.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8001 --no-access-log
+bash 启动本地伴护.command
 ```
 
-```sh
-cd web
+### Windows 10 / 11
+
+先安装64位 Python 3.12、Node.js 24和pnpm，然后在PowerShell中进入项目根目录：
+
+```powershell
+py -3.12 -m venv vision\.venv
+vision\.venv\Scripts\python.exe -m pip install --upgrade pip
+vision\.venv\Scripts\python.exe -m pip install -r vision\requirements.in
+vision\.venv\Scripts\python.exe vision\download_model.py
+Set-Location web
+pnpm install --frozen-lockfile
+Set-Location ..
+```
+
+双击 `下载模型-Windows.bat`。它会调用PowerShell脚本，不需要修改系统的永久执行策略。也可以直接运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\下载模型-Windows.ps1
+```
+
+Windows分开启动两个终端。终端一：
+
+```powershell
+Set-Location vision
+.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8001 --no-access-log
+```
+
+终端二：
+
+```powershell
+Set-Location web
 pnpm dev --port 3000
 ```
 
-默认 CPU 推理。暂未验证 MPS；需要尝试时可在视觉服务启动前设置 `CARE_DEVICE=mps`。不要把 Python 服务绑定到 `0.0.0.0`；浏览器端固定只允许本机网页和 `127.0.0.1:8001`。
+打开 `http://localhost:3000`。Windows首次使用摄像头时，还需在“设置 → 隐私和安全性 → 相机”中允许桌面浏览器访问。
+
+Windows命令、路径处理和平台依赖安装方式已经加入仓库，但本轮自动回归运行在macOS arm64；Windows摄像头、PyTorch设备和PowerShell启动仍需由队友在实际电脑上验收。
+
+### V3.1模型为什么单独下载
+
+普通Git提交不包含 `decision_model/outputs/`。`scripts/download_models.py` 会执行两步：
+
+1. 从本项目的GitHub Release下载V3.1增量权重压缩包，校验压缩包和 `best_delta.pt` 的SHA256后，安装到 `decision_model/outputs/partial-macbert-v31-20260829T132719Z/`。
+2. 从Hugging Face准备固定提交 `hfl/chinese-macbert-base@a986e004d2a7f2a1c2f5a3edef4e20604a974ed1`。网页推理仍以离线模式读取缓存，不会在演示过程中静默更换基础模型。
+
+需要能够访问GitHub和Hugging Face。中途失败可重新运行；已经通过校验的V3.1文件不会重复下载。只检查现有文件、不联网：
+
+```sh
+vision/.venv/bin/python scripts/download_models.py --verify-only
+```
+
+Windows对应命令：
+
+```powershell
+vision\.venv\Scripts\python.exe scripts\download_models.py --verify-only
+```
+
+只安装55MB增量权重、不准备基础MacBERT时可增加 `--delta-only`。这种情况下，基础模型必须已经存在于本机Hugging Face缓存中，否则V3.1仍不可用。
+
+默认使用CPU推理。Windows若安装了兼容的NVIDIA CUDA版PyTorch，可再单独验证GPU；本项目不承诺所有显卡和驱动组合。macOS需要尝试MPS时，可在视觉服务启动前设置 `CARE_DEVICE=mps`。不要把Python服务绑定到 `0.0.0.0`；浏览器端固定只允许本机网页和 `127.0.0.1:8001`。
 
 ## 验证
 
@@ -176,7 +236,7 @@ pnpm build
 
 第 04 部分回归结果：前端 60 项、Python 后端 20 项测试通过；TypeScript、oxlint 与生产构建通过。新增覆盖网页回执计时、执行失败、重复请求、跌倒锁存与人工结束、多来源并发、观测不足禁止 L0、报告不包含画面与令牌。本轮未自动开启摄像头，也未进行浏览器交互或真实跌倒准确率测试。后端测试有一条现存 Starlette/httpx 弃用提示，不影响测试通过。
 
-当前反馈闭环回归结果：前端 **81 项**、Python 后端 **58 项**通过；类型检查、oxlint 与生产构建通过。新增覆盖反馈必须绑定已呈现轮次、回应后证据复核、持续风险重新升级、图示预设 15 秒窗口、迟到反馈拒绝、反馈后 AI 请求版本更新、旧 AI 结果只存档、AI 提前返回不能绕过能力规则，以及格式 v5 导出。浏览器已实测 I1 提示呈现、反馈后二次 AI、10 秒证据复核、I1 → I2 新轮次、超时 I4 和恢复后结束，控制台无报错；未进行临床验证或真实跌倒准确率测试。
+当前反馈闭环回归结果：前端 **81 项**、Python 后端 **58 项**、决策模型与下载器 **35 项**通过；类型检查、oxlint 与生产构建通过。新增覆盖反馈必须绑定已呈现轮次、回应后证据复核、持续风险重新升级、图示预设 15 秒窗口、迟到反馈拒绝、反馈后 AI 请求版本更新、旧 AI 结果只存档、AI 提前返回不能绕过能力规则、格式 v5 导出，以及模型压缩包与路径安全校验。浏览器已实测 I1 提示呈现、反馈后二次 AI、10 秒证据复核、I1 → I2 新轮次、超时 I4 和恢复后结束，控制台无报错；未进行临床验证或真实跌倒准确率测试。
 
 ## 架构与文件
 

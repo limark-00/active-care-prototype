@@ -29,6 +29,24 @@ bash decision_model/run_partial_finetuning_v31.command
 
 检查点写入`outputs/partial-macbert-v31-时间/best_delta.pt`。网页服务默认选择最新V3.1检查点，也可用`CARE_DECISION_CHECKPOINT`明确指定。
 
+## 直接安装已训练的V3.1模型
+
+Git仓库保留数据、训练代码和推理结构，但不把二进制训练输出写入普通提交。已训练的V3.1增量权重由GitHub Release分发，并通过SHA256校验。
+
+macOS在项目根目录运行：
+
+```sh
+bash 下载模型.command
+```
+
+Windows双击`下载模型-Windows.bat`，或在PowerShell运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\下载模型-Windows.ps1
+```
+
+下载器同时准备固定版本的`hfl/chinese-macbert-base`。V3.1检查点只保存解冻层、Event Transformer和任务头，缺少基础MacBERT时不能独立推理。完整安装、离线验证和分平台启动说明见项目根目录README。
+
 重新生成V2或V1：
 
 ```bash
